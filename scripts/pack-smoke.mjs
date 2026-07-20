@@ -23,7 +23,10 @@ try {
   if (!tarball) throw new Error("npm pack did not produce x424-*.tgz");
   const tarballPath = join(root, tarball);
   execFileSync("npm", ["init", "-y"], { cwd: work, stdio: "inherit" });
-  execFileSync("npm", ["install", tarballPath], { cwd: work, stdio: "inherit" });
+  execFileSync("npm", ["install", tarballPath], {
+    cwd: work,
+    stdio: "inherit",
+  });
 
   const smoke = `
     import('x424/core').then(async (core) => {

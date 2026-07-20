@@ -28,11 +28,14 @@
         },
         "responses": {
           "201": {
-            "description": "Dependency created. HUMAN-REQUIRED carries the base64url requirement.",
+            "description": "Dependency created. When x424Transport is header, HUMAN-REQUIRED carries the base64url requirement (≤8192 UTF-8 bytes). Larger requirements use body transport and omit HUMAN-REQUIRED.",
             "headers": {
               "HUMAN-REQUIRED": {
-                "required": true,
-                "schema": { "type": "string", "maxLength": 65536 }
+                "required": false,
+                "schema": { "type": "string", "maxLength": 8192 }
+              },
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-store, private" }
               }
             },
             "content": {
@@ -40,11 +43,12 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["requirement"],
+                  "required": ["requirement", "x424Transport"],
                   "properties": {
                     "requirement": {
                       "$ref": "#/components/schemas/HumanRequirement"
-                    }
+                    },
+                    "x424Transport": { "enum": ["header", "body"] }
                   }
                 }
               }
@@ -219,7 +223,12 @@
           "method": { "type": "string", "minLength": 1, "maxLength": 20 },
           "uri": { "type": "string", "format": "uri", "maxLength": 2048 },
           "audience": { "type": "string", "format": "uri", "maxLength": 2048 },
-          "body": {},
+          "body": {
+            "description": "Deprecated. Plain JSON object/array only. Prefer bodyInput."
+          },
+          "bodyInput": {
+            "$ref": "#/components/schemas/RequestBodyDigestInput"
+          },
           "binding": { "$ref": "#/components/schemas/Binding" },
           "accepts": {
             "type": "array",
@@ -261,7 +270,10 @@
               "method": { "type": "string" },
               "uri": { "type": "string", "format": "uri" },
               "audience": { "type": "string", "format": "uri" },
-              "requestDigest": { "type": "string", "pattern": "^sha256:" }
+              "requestDigest": {
+                "type": "string",
+                "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+              }
             }
           },
           "nonce": { "type": "string" },
@@ -341,7 +353,10 @@
           "satisfied": { "const": true },
           "purpose": { "type": "string" },
           "audience": { "type": "string", "format": "uri" },
-          "requestDigest": { "type": "string", "pattern": "^sha256:" },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+          },
           "binding": { "$ref": "#/components/schemas/Binding" },
           "providerId": {
             "type": "string",
@@ -368,7 +383,10 @@
           "verificationMode": {
             "enum": ["backend", "offchain", "onchain", "hybrid"]
           },
-          "proofDigest": { "type": "string", "pattern": "^sha256:" },
+          "proofDigest": {
+            "type": "string",
+            "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+          },
           "claim": { "type": "string" },
           "nonClaims": {
             "type": "array",
@@ -389,8 +407,93 @@
           "type": { "type": "string", "format": "uri" },
           "title": { "type": "string" },
           "status": { "type": "integer" },
-          "detail": { "type": "string" }
+          "detail": { "type": "string", "maxLength": 200 },
+          "code": { "type": "string" }
         }
+      },
+      "RequestBodyDigestInput": {
+        "description": "Explicit ADR-0002 body digest kinds. Never infer Blob/Date/class as JSON. Stream without precomputed fails closed and is not accepted on this wire API.",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": { "kind": { "const": "absent" } }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": { "kind": { "const": "empty" } }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "value"],
+            "properties": {
+              "kind": { "const": "json" },
+              "value": {
+                "description": "Plain JSON object or array only"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "bytesBase64url"],
+            "properties": {
+              "kind": { "const": "opaque" },
+              "bytesBase64url": {
+                "type": "string",
+                "description": "Exact body bytes, strict unpadded base64url"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "bodyDigest"],
+            "properties": {
+              "kind": { "const": "precomputed" },
+              "bodyDigest": {
+                "type": "string",
+                "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+              }
+            }
+          }
+        ]
+      },
+      "HumanRequiredProblem": {
+        "description": "Resource-server 424 challenge body (see schemas/human-required-problem-0.1.schema.json)",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "dependencyId",
+          "x424Transport"
+        ],
+        "properties": {
+          "type": { "const": "https://x424.org/problems/human-required" },
+          "title": { "const": "Unique human required" },
+          "status": { "const": 424 },
+          "detail": { "type": "string" },
+          "dependencyId": { "type": "string" },
+          "x424Transport": { "enum": ["header", "body"] },
+          "requirement": { "$ref": "#/components/schemas/HumanRequirement" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "x424Transport": { "const": "body" } } },
+            "then": { "required": ["requirement"] }
+          },
+          {
+            "if": { "properties": { "x424Transport": { "const": "header" } } },
+            "then": { "not": { "required": ["requirement"] } }
+          }
+        ]
       }
     }
   }

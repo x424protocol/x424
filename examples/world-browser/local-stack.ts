@@ -11,11 +11,9 @@ import {
   InMemoryRequirementStore,
   InMemoryResultReplayStore,
   defineMethodCatalog,
+  sha256,
 } from "../../src/core.js";
-import {
-  encodeHumanRequirement,
-  humanRequiredResponse,
-} from "../../src/http.js";
+import { humanRequiredResponse } from "../../src/http.js";
 import { createExpressHumanDependencyMiddleware } from "../../src/middleware/resource.js";
 import {
   WORLD_ID_PROOF_OF_HUMAN_METHOD,
@@ -55,7 +53,7 @@ const fakeWorldAdapter: HumanProviderAdapter = {
       uniquenessScope: { kind: "action", id: "world:action:publish-record" },
       verificationMode: "backend",
       providerReplayMode: "verifier",
-      proofDigest: "sha256:fake-proof",
+      proofDigest: sha256("fake-proof"),
       verifiedAt: new Date().toISOString(),
     };
   },
@@ -78,6 +76,7 @@ app.use(
     service,
     requirementStore,
     deploymentProfile: "dev-local-0.1",
+    allowUnauthenticatedIssuance: true,
     providerRequests: async () => ({
       "world:proof-of-human": {
         environment: "staging",
@@ -123,7 +122,6 @@ app.post(
       await requirementStore.put(requirement);
       await service.register(requirement);
       const challenge = humanRequiredResponse(requirement);
-      response.set("human-required", encodeHumanRequirement(requirement));
       for (const [key, value] of Object.entries(challenge.headers)) {
         response.setHeader(key, value);
       }
@@ -132,6 +130,7 @@ app.post(
     return next();
   },
   createExpressHumanDependencyMiddleware({
+    deploymentProfile: "dev-local-0.1",
     purpose: "publish-record",
     audience,
     accepts: createWorldIdMethodRequirements({ allowLegacyProofs: false }),
@@ -139,6 +138,7 @@ app.post(
     verifier: keys.verifier,
     requirementStore,
     replayStore,
+    publicOrigin: { publicOrigin: audience },
     requireIdempotencyKey: false,
     extractBinding: async ({ headers }) => {
       const value = headers.get("x-session-binding");

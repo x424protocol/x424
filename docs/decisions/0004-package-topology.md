@@ -1,8 +1,9 @@
 # ADR-0004: Package topology for 0.1/0.2
 
-- Status: accepted
+- Status: review-pending
 - Date: 2026-07-19
-- Decision makers: Reference lead (program baseline)
+- Decision makers: Reference lead (implementation proposal)
+- Required reviewers: runtime/security lead (not yet recorded)
 - Requirement IDs: distribution / DX (ROADMAP 0.1)
 
 ## Context

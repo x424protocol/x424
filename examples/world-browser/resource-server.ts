@@ -21,6 +21,7 @@ app.use(express.json());
 app.post(
   "/records",
   createExpressHumanDependencyMiddleware({
+    deploymentProfile: "dev-local-0.1",
     purpose: "publish-record",
     audience: "http://127.0.0.1:9090",
     accepts: [
@@ -36,6 +37,7 @@ app.post(
     verifier: keys.verifier,
     requirementStore: new InMemoryRequirementStore(),
     replayStore: new InMemoryResultReplayStore(),
+    publicOrigin: { publicOrigin: "http://127.0.0.1:9090" },
     extractBinding: async ({ headers }) => {
       const value = headers.get("x-session-binding");
       if (!value) throw new Error("Missing authenticated session binding");

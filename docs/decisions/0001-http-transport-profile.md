@@ -1,68 +1,73 @@
 # ADR-0001: HTTP transport compatibility profile
 
-- Status: accepted
+- Status: review-pending
 - Date: 2026-07-19
-- Decision makers: Protocol lead (program baseline)
+- Updated: 2026-07-20
+- Decision makers: Protocol lead (implementation proposal)
+- Required reviewers: independent protocol reviewer (not yet recorded)
 - Requirement IDs: X424-HTTP-001..011, X424-PRIV-003
 
 ## Context
 
 Intermediaries truncate headers; browsers enforce CORS; redirects can leak
-challenges. x424/0.1 needs an explicit, fail-closed transport profile before
-independent implementations freeze behavior.
+challenges. x424/0.1 needs an explicit, fail-closed transport profile.
 
 ## Alternatives
 
 1. Keep headers-only with a 64 KiB implementation max and no alternate transport.
-2. Always use body/`application/x424-requirement+json` and deprecate headers.
-3. **Selected:** Keep HUMAN-REQUIRED inline headers with a conservative envelope;
-   offer a versioned `requirementRef` / body transport when the encoded
-   requirement exceeds the conservative limit or intermediaries strip headers.
+2. Always use body transport and deprecate headers.
+3. **Selected for implementation:** Keep HUMAN-REQUIRED inline headers within an
+   8 KiB encoded envelope; carry larger requirements in the 424 problem body
+   (`x424Transport: "body"`). Reference-URL transport is **not** supported in
+   0.1 and is removed from the mode union until specified with integrity,
+   HTTPS, and redirect rules.
 
 ## Decision
 
-- Canonical challenge remains HTTP 424 + `HUMAN-REQUIRED` + Problem Details +
+- Canonical challenge remains HTTP 424 + Problem Details +
   `Cache-Control: no-store, private` + `Vary: HUMAN-PROOF`.
-- **Conservative inline envelope:** 8 KiB encoded header value for
-  interoperability-candidate profiles; reference implementation continues to
-  reject above 64 KiB absolute max.
-- Above 8 KiB, issuers SHOULD use transport mode `body` or `reference`
-  (`x424Transport` extension on the problem body / requirement envelope) without
-  weakening integrity, expiry, or cache rules.
-- CORS (resource and verifier browser surfaces): explicit allowlist; expose
-  `HUMAN-REQUIRED`, `HUMAN-PROOF`, `HUMAN-RESULT`; credentialed requests only
-  for explicit origins; preflight must allow those headers.
-- Redirects: clients MUST NOT follow cross-origin redirects when attaching
-  `HUMAN-PROOF` or when reading `HUMAN-REQUIRED` for retry; challenge URI must
-  match the request URI used for digest binding.
+- **Inline envelope:** 8,192 UTF-8 bytes of the encoded header value.
+- Above the envelope, servers MUST NOT emit `HUMAN-REQUIRED`; they MUST set
+  `x424Transport: "body"` and include the full `requirement` object in the
+  problem body.
+- Problem bodies MUST name exactly one transport: a `header` body cannot embed
+  a requirement, while a `body` requirement's dependencyId must match the
+  enclosing problem. Clients reject conflicting header/body representations.
+- Absolute maximum encoded requirement size remains 65,536 bytes.
+- CORS: exact origin allowlists; expose `HUMAN-REQUIRED`, `HUMAN-PROOF`,
+  `HUMAN-RESULT` when used.
+- Clients MUST use `redirect: "manual"` for challenge detection and verifier
+  proof submission; cross-origin and opaque redirects fail closed; nativeProof
+  is never resent after any redirect.
 - x424 extends RFC 4918 status 424 semantics; it does not claim WebDAV
   conformance.
 
 ## Security impact
 
-Reduces truncation/smuggling ambiguity; prevents credentialed CORS reflection;
-blocks cross-origin proof forwarding. Does not accept more proofs.
+Prevents oversized-header truncation ambiguity and redirect proof leakage.
+Does not accept more proofs.
 
 ## Privacy impact
 
-No change to proof/nullifier boundary. Alternate transport must use same
-no-store caching rules.
+No change to proof/nullifier boundary. Body transport uses the same no-store
+caching rules.
 
 ## Compatibility and migration
 
-Header-only clients remain valid under 8 KiB. Larger requirements need 0.1
-transport mode fields documented in PROTOCOL and schemas. Unsupported modes
-fail closed.
+Header-only clients remain valid under 8 KiB. Clients must also accept body
+transport. Unsupported mode `reference` fails closed if encountered.
 
 ## Negative vectors / tests
 
-- `transport-header-over-absolute-max`
-- `transport-cors-disallowed-origin`
-- `transport-redirect-cross-origin-proof`
-- `transport-challenge-uri-mismatch`
+Implemented locally:
+
+- `transport-header-over-envelope-uses-body` (test/security-regressions)
+- `transport-cors-disallowed-origin` (test/transport)
+- `transport-redirect-cross-origin-proof` (test/security-regressions)
+- `transport-challenge-uri-mismatch` (test/transport, client)
+- `transport-conflicting-or-oversized-inline-rejected` (test/security-regressions)
 
 ## Unresolved risks
 
-Full intermediary lab matrix (nginx/Envoy/Cloudflare/browsers) still requires
-empirical measurement; limits may tighten via a new ADR without silent
-reinterpretation of existing vectors.
+Full intermediary lab matrix and independent protocol review remain open.
+This ADR is not self-approved.

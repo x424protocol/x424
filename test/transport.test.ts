@@ -17,7 +17,9 @@ describe("transport profile", () => {
     expect(
       selectRequirementTransportMode(X424_HEADER_INTEROP_ENVELOPE_BYTES + 1),
     ).toBe("body");
-    expect(() => selectRequirementTransportMode(70_000)).toThrow(/absolute/);
+    expect(() => selectRequirementTransportMode(70_000)).toThrow(
+      /absolute transport maximum/,
+    );
   });
 
   it("builds CORS headers only for allowlisted origins", () => {

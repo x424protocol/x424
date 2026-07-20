@@ -43,8 +43,10 @@ invalid base64url/JSON, and send `Cache-Control: no-store, private`.
 
 HTTP 424 is standardized for WebDAV dependency failures by RFC 4918. x424 uses
 its dependency semantics as an extension for ordinary HTTP resources; it does
-not assert WebDAV conformance. A client identifies x424 by the
-`HUMAN-REQUIRED` header and supported payload version, not status alone.
+not assert WebDAV conformance. A client identifies x424 by a supported
+`HUMAN-REQUIRED` header transport or the versioned `x424Transport` marker in a
+valid problem body, not status alone. If both are present they MUST describe
+the same dependency; otherwise the client MUST reject the challenge.
 
 ## 3. HumanRequirement
 
@@ -111,14 +113,29 @@ and `docs/decisions/0003-canonicalization-candidate.md`.
 
 ### 3.2 Transport profile
 
-HTTP 424 + `HUMAN-REQUIRED` remains the canonical challenge. Implementations
-MUST reject header values above 64 KiB. The interoperability envelope for
-inline headers is 8 KiB (ADR-0001); larger requirements SHOULD use a versioned
-`body` or `reference` transport without weakening integrity, expiry, or
-`Cache-Control: no-store, private`. Clients MUST NOT follow cross-origin
-redirects when reading challenges or attaching `HUMAN-PROOF`. CORS, when
-enabled for browser clients, MUST allowlist origins and expose `HUMAN-REQUIRED`,
-`HUMAN-PROOF`, and `HUMAN-RESULT`.
+HTTP 424 + Problem Details remains the canonical challenge, with
+`Cache-Control: no-store, private` and `Vary: HUMAN-PROOF`.
+
+Supported requirement transports in x424/0.1:
+
+- `header` — `HUMAN-REQUIRED` carries base64url(canonical JSON) when the encoded
+  value is ≤ 8,192 UTF-8 bytes;
+- `body` — when the encoded requirement would exceed 8,192 bytes, servers MUST
+  omit `HUMAN-REQUIRED` and include `x424Transport: "body"` plus the full
+  `requirement` object in the problem body.
+
+Problem bodies MUST always include `x424Transport`. `header` bodies MUST NOT
+embed `requirement`; `body` bodies MUST embed it and its `dependencyId` MUST
+match the enclosing problem. An inline `HUMAN-REQUIRED` above the 8,192-byte
+interop envelope is invalid even when it remains below the absolute cap.
+
+Implementations MUST reject encoded requirements above 65,536 bytes. The
+`reference` transport is not defined for 0.1 and MUST fail closed if offered.
+
+Clients MUST use manual redirect handling for challenge detection and verifier
+proof submission. Cross-origin, opaque, and proof-resending redirects fail
+closed. CORS, when enabled, MUST use exact origin allowlists and may expose
+`HUMAN-REQUIRED`, `HUMAN-PROOF`, and `HUMAN-RESULT`.
 
 ## 4. Exact method requirement
 

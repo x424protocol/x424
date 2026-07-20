@@ -145,6 +145,7 @@ describe("x424 fetch client", () => {
       }),
       fetchImplementation: fetchImplementation as unknown as typeof fetch,
       headers: { authorization: "Bearer verifier-token" },
+      allowHttpLocalhost: false,
     });
 
     await expect(

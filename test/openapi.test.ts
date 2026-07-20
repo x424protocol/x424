@@ -19,7 +19,13 @@ describe("OpenAPI contract", () => {
       "/v1/requirements/{dependencyId}/verify",
     ]);
     expect(spec.components.schemas.HumanResult).toBeTruthy();
+    expect(spec.components.schemas.RequestBodyDigestInput).toBeTruthy();
+    expect(spec.components.schemas.HumanRequiredProblem).toBeTruthy();
+    expect(raw).toContain('"x424Transport"');
     expect(raw).not.toContain("providerSubject");
     expect(raw).not.toContain("nullifierHash");
+    expect(raw).toMatch(
+      /"x424Transport":\s*\{\s*"enum":\s*\["header",\s*"body"\]/,
+    );
   });
 });

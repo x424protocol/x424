@@ -10,6 +10,7 @@ import {
   InMemoryProviderReplayStore,
   InMemoryRequirementStore,
   defineMethodCatalog,
+  sha256,
 } from "../../src/core.js";
 import {
   WORLD_ID_PROOF_OF_HUMAN_METHOD,
@@ -44,7 +45,7 @@ const fakeWorldAdapter: HumanProviderAdapter = {
       uniquenessScope: { kind: "action", id: "world:action:publish-record" },
       verificationMode: "backend",
       providerReplayMode: "verifier",
-      proofDigest: "sha256:fake-proof",
+      proofDigest: sha256("fake-proof"),
       verifiedAt: new Date().toISOString(),
     };
   },
@@ -66,6 +67,7 @@ app.use(
     service,
     requirementStore: new InMemoryRequirementStore(),
     deploymentProfile: "dev-local-0.1",
+    allowUnauthenticatedIssuance: true,
     providerRequests: async ({ purpose, binding, accepts }) => {
       // Trusted backend only — never accept client-supplied RP signing material.
       void purpose;

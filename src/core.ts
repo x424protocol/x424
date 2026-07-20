@@ -1,6 +1,7 @@
 export * from "./canonical.js";
 export * from "./catalog.js";
 export * from "./client.js";
+export * from "./encoding.js";
 export * from "./http.js";
 export * from "./nonce-store.js";
 export * from "./policy.js";
@@ -18,4 +19,5 @@ export * from "./metadata/verifier-metadata.js";
 export * from "./keys/managed.js";
 export * from "./ops/limits.js";
 export * from "./ops/redaction.js";
+export * from "./ops/errors.js";
 export * from "./postgres/store.js";

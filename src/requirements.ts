@@ -1,5 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { requestDigest } from "./canonical.js";
+import {
+  requestDigest,
+  type RequestBodyDigestInput,
+  bodyInputFromPlainJsonBody,
+} from "./canonical.js";
 import { isHumanMethodIdentifier, methodKey } from "./catalog.js";
 import type {
   HumanBinding,
@@ -13,7 +17,9 @@ export function createHumanRequirement(input: {
   readonly method: string;
   readonly uri: string;
   readonly audience: string;
+  /** @deprecated Prefer bodyInput. Plain JSON object/array or Uint8Array only. */
   readonly body?: unknown;
+  readonly bodyInput?: RequestBodyDigestInput;
   readonly binding: HumanBinding;
   readonly accepts: readonly HumanMethodRequirement[];
   readonly providerRequests?: Readonly<Record<string, unknown>>;
@@ -44,6 +50,11 @@ export function createHumanRequirement(input: {
   if (!Number.isInteger(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 900) {
     throw new Error("Requirement TTL must be between 30 and 900 seconds");
   }
+  const bodyInput =
+    input.bodyInput ??
+    (input.body === undefined
+      ? { kind: "absent" as const }
+      : bodyInputFromPlainJsonBody(input.body));
   return {
     x424Version: X424_VERSION,
     dependencyId: input.dependencyId ?? `x424_dep_${randomUUID()}`,
@@ -55,7 +66,7 @@ export function createHumanRequirement(input: {
       requestDigest: requestDigest({
         method: input.method,
         uri: input.uri,
-        ...(input.body === undefined ? {} : { body: input.body }),
+        bodyInput,
       }),
     },
     nonce: input.nonce ?? randomBytes(32).toString("base64url"),

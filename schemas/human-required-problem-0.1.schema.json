@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://x424.org/schemas/human-required-problem-0.1.schema.json",
+  "title": "x424 Human-Required Problem Details 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "title",
+    "status",
+    "detail",
+    "dependencyId",
+    "x424Transport"
+  ],
+  "properties": {
+    "type": {
+      "const": "https://x424.org/problems/human-required"
+    },
+    "title": { "const": "Unique human required" },
+    "status": { "const": 424 },
+    "detail": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "dependencyId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "x424Transport": { "enum": ["header", "body"] },
+    "requirement": {
+      "$ref": "https://x424.org/schemas/human-requirement-0.1.schema.json"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "x424Transport": { "const": "body" } } },
+      "then": { "required": ["requirement"] }
+    },
+    {
+      "if": { "properties": { "x424Transport": { "const": "header" } } },
+      "then": { "not": { "required": ["requirement"] } }
+    }
+  ]
+}

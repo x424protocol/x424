@@ -15,7 +15,7 @@ describe("proof-safe redaction", () => {
 
   it("detects sensitive substrings in serialized output", () => {
     expect(() => assertNoSensitiveLeak('{"nullifier":"x"}')).toThrow(
-      /nullifier/,
+      /Sensitive field leaked/,
     );
   });
 });

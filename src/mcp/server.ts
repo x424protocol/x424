@@ -10,6 +10,7 @@ import {
   encodeHumanRequirement,
   encodeHumanResult,
   evaluateHumanResult,
+  sha256,
   verifyHumanResultToken,
 } from "../index.js";
 import type { HumanMethodDescriptor, HumanResult } from "../types.js";
@@ -131,14 +132,13 @@ function ok(structuredContent: Record<string, unknown>) {
   };
 }
 
-function toolError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Unknown x424 error";
+function toolError(_error: unknown) {
   return {
     isError: true,
     content: [
       {
         type: "text" as const,
-        text: `x424 rejected the input: ${message}. Inspect the dependency and use the exact provider, method, audience, request, and caller binding.`,
+        text: "x424 rejected the input. Inspect the dependency and use the exact provider, method, audience, request, and caller binding.",
       },
     ],
   };
@@ -437,7 +437,7 @@ export function createX424McpServer(): McpServer {
           id: "example:rp_fixture",
         },
         verificationMode: "backend",
-        proofDigest: "sha256:fixture-proof",
+        proofDigest: sha256("fixture-proof"),
         claim: CONFORMANCE_METHOD.claim,
         nonClaims: CONFORMANCE_METHOD.nonClaims,
         verifiedAt: "2026-07-19T11:59:30.000Z",
@@ -449,7 +449,10 @@ export function createX424McpServer(): McpServer {
         providerId: "other-provider",
         methodId: "unique-human",
       };
-      const requestSubstitution = { ...result, requestDigest: "sha256:wrong" };
+      const requestSubstitution = {
+        ...result,
+        requestDigest: sha256("wrong"),
+      };
       return {
         contents: [
           {
