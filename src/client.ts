@@ -5,6 +5,10 @@ import {
   decodeHumanRequirement,
 } from "./http.js";
 import { methodKey } from "./catalog.js";
+import {
+  assertChallengeRequestMatch,
+  isCrossOriginRedirect,
+} from "./transport.js";
 import { X424_VERSION, type HumanRequirement } from "./types.js";
 
 export interface HumanDependencyResolution {
@@ -111,8 +115,32 @@ export async function fetchWithX424(
 ): Promise<Response> {
   const fetchImplementation = options.fetchImplementation ?? fetch;
   const firstRequest = new Request(input, init);
-  const retryBody = firstRequest.clone();
-  const firstResponse = await fetchImplementation(firstRequest);
+  // Clone before the first fetch so the body remains available for one retry.
+  let retryBody: Request;
+  try {
+    retryBody = firstRequest.clone();
+  } catch {
+    throw new Error(
+      "Request body is not replayable; supply a cloneable body or precomputed digest",
+    );
+  }
+  // redirect:manual so HUMAN-PROOF is never attached across a cross-origin hop.
+  const firstResponse = await fetchImplementation(
+    new Request(firstRequest, { redirect: "manual" }),
+  );
+  if (
+    isCrossOriginRedirect(
+      firstRequest.url,
+      firstResponse.headers.get("location"),
+    )
+  ) {
+    throw new Error("x424 refuses cross-origin redirect during challenge");
+  }
+  // Opaque redirect responses have status 0 in browsers; treat as failure.
+  if (firstResponse.type === "opaqueredirect") {
+    throw new Error("x424 refuses opaque redirects during challenge");
+  }
+
   const required = firstResponse.headers.get(HUMAN_REQUIRED_HEADER);
 
   if (firstResponse.status !== 424 || !required) return firstResponse;
@@ -120,12 +148,13 @@ export async function fetchWithX424(
 
   const requirement = decodeHumanRequirement(required);
   const challengedUri = firstResponse.url || firstRequest.url;
-  if (
-    requirement.resource.method !== firstRequest.method ||
-    requirement.resource.uri !== challengedUri
-  ) {
-    throw new Error("Human dependency challenge names another HTTP request");
-  }
+  assertChallengeRequestMatch({
+    requestMethod: firstRequest.method,
+    requestUrl: firstRequest.url,
+    challengeUrl: challengedUri,
+    resourceMethod: requirement.resource.method,
+    resourceUri: requirement.resource.uri,
+  });
   const resolution = await options.resolveHumanDependency({
     requirement,
     response: firstResponse,
@@ -136,5 +165,7 @@ export async function fetchWithX424(
 
   const headers = new Headers(retryBody.headers);
   headers.set(HUMAN_PROOF_HEADER, resolution.humanProof);
-  return fetchImplementation(new Request(retryBody, { headers }));
+  return fetchImplementation(
+    new Request(retryBody, { headers, redirect: "manual" }),
+  );
 }

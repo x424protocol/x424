@@ -8,6 +8,24 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ### Added
 
+- Program baseline controls under `docs/program/` (severity policy, deployment
+  profiles, conflict governance, threat/data-flow, requirement IDs, deliverable
+  register, external engagement packages).
+- Decision records ADR-0001..0004 for transport, body digests, canonicalization
+  candidate, and package topology.
+- HTTP transport helpers (CORS, header envelope, redirect safety) and expanded
+  request body digest profiles (`x424-canon-0.1`).
+- Authenticated issuance authorization interface and static bearer profile.
+- Signed verifier metadata document helpers with key validity/revocation checks.
+- KMS/HSM-oriented external result signing and pairwise secret version helpers.
+- Express and Fetch resource middleware with Idempotency-Key default on mutations.
+- PostgreSQL transactional state store profile and schema DDL.
+- Rate limiter, circuit breaker, provider egress allowlist, and proof-safe
+  redaction helpers.
+- Verifier container skeleton (`deploy/verifier`) with health/ready probes.
+- Black-box conformance CLI scaffold (`x424-conformance`).
+- World browser local-stack example using public APIs with legacy disabled.
+- Operational runbooks for key compromise, provider outage, state restore, abuse.
 - Redis-backed atomic requirement, dependency nonce, provider-subject, and
   result-replay state.
 - Injectable requirement storage for the Express verifier router.

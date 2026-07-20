@@ -18,6 +18,11 @@ An inconsistency is a protocol defect. Implementations must not choose the
 interpretation that accepts more proofs; unresolved ambiguity fails closed and
 requires a versioned correction.
 
+Program controls, severity policy, deployment profiles, and conflict rules live
+under [program/](program/). Portable decisions use
+[decisions/](decisions/). Adopter-driven changes follow
+[program/CONFLICT_GOVERNANCE.md](program/CONFLICT_GOVERNANCE.md).
+
 ## Change process
 
 - Protocol changes are proposed publicly with motivation, security impact,

@@ -1,7 +1,17 @@
 import { canonicalJson } from "./canonical.js";
 import { evaluateHumanResult } from "./policy.js";
 import { parseHumanRequirement, parseHumanResult } from "./schemas.js";
-import { verifyHumanResultToken, type ResultVerifier } from "./result-token.js";
+import {
+  verifyHumanResultToken,
+  type ResultVerifier,
+  type ResultVerifierKeySet,
+} from "./result-token.js";
+import {
+  X424_HEADER_ABSOLUTE_MAX_BYTES,
+  assertHeaderSize,
+  selectRequirementTransportMode,
+  type X424RequirementTransportMode,
+} from "./transport.js";
 import type {
   HumanMethodDescriptor,
   HumanRequirement,
@@ -15,13 +25,27 @@ export const HUMAN_PROOF_HEADER = "human-proof";
 export const HUMAN_RESULT_HEADER = "human-result";
 
 export function encodeX424Header(value: unknown): string {
-  return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
+  const encoded = Buffer.from(canonicalJson(value), "utf8").toString(
+    "base64url",
+  );
+  assertHeaderSize(encoded);
+  return encoded;
 }
 
 export function decodeX424Header<T>(value: string): T {
-  if (!value || value.length > 65_536) throw new Error("Invalid x424 header");
+  assertHeaderSize(value);
   return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as T;
 }
+
+export function requirementTransportMode(
+  requirement: HumanRequirement,
+): X424RequirementTransportMode {
+  return selectRequirementTransportMode(
+    encodeHumanRequirement(requirement).length,
+  );
+}
+
+export { X424_HEADER_ABSOLUTE_MAX_BYTES, selectRequirementTransportMode };
 
 export function encodeHumanRequirement(requirement: HumanRequirement): string {
   return encodeX424Header(requirement);
@@ -46,7 +70,7 @@ export function decodeHumanResult(value: string): HumanResult {
 export async function verifyHumanProofHeader(input: {
   readonly humanProof: string;
   readonly requirement: HumanRequirement;
-  readonly verifier: ResultVerifier;
+  readonly verifier: ResultVerifier | ResultVerifierKeySet;
   readonly catalog: ReadonlyMap<string, HumanMethodDescriptor>;
   readonly replayStore?: ResultReplayStore;
   readonly now?: Date;

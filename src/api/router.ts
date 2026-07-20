@@ -10,6 +10,11 @@ import { createHumanRequirement } from "../requirements.js";
 import { InMemoryRequirementStore } from "../requirement-store.js";
 import { parseHumanProofSubmission } from "../schemas.js";
 import type { X424Service } from "../service.js";
+import {
+  authorizeIssuance,
+  IssuanceAuthorizationError,
+  type IssuanceAuthenticator,
+} from "../auth/issuance.js";
 import type {
   HumanBinding,
   HumanMethodRequirement,
@@ -79,6 +84,19 @@ export interface X424HttpRouterOptions {
   /** Shared pending state. Omit only for local development and tests. */
   readonly requirementStore?: RequirementStore;
   readonly maximumPendingRequirements?: number;
+  /**
+   * Production profiles must authenticate issuance. Omit only for
+   * `dev-local-0.1` and tests — never for eval/prod profiles.
+   */
+  readonly issuanceAuthenticator?: IssuanceAuthenticator;
+  readonly rateLimiter?: {
+    consume(key: string): {
+      allowed: boolean;
+      remaining: number;
+      resetAt: number;
+    };
+  };
+  readonly deploymentProfile?: string;
 }
 
 function exactMethods(
@@ -131,6 +149,20 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.post(
     "/v1/requirements",
     async (request: Request, response: Response) => {
+      if (options.rateLimiter) {
+        const key = request.ip ?? "unknown";
+        const limit = options.rateLimiter.consume(`issue:${key}`);
+        response.setHeader("x-ratelimit-remaining", String(limit.remaining));
+        if (!limit.allowed) {
+          response.setHeader("retry-after", "1");
+          return problem(
+            response,
+            429,
+            "RATE_LIMITED",
+            "Issuance rate limit exceeded",
+          );
+        }
+      }
       const parsed = CreateSchema.safeParse(request.body);
       if (!parsed.success) {
         return problem(
@@ -141,6 +173,28 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
         );
       }
       try {
+        if (options.issuanceAuthenticator) {
+          const principal = await options.issuanceAuthenticator.authenticate({
+            authorizationHeader: request.get("authorization") ?? null,
+          });
+          authorizeIssuance(principal, {
+            purpose: parsed.data.purpose,
+            method: parsed.data.method,
+            uri: parsed.data.uri,
+            audience: parsed.data.audience,
+            accepts: parsed.data.accepts,
+          });
+        } else if (
+          options.deploymentProfile &&
+          options.deploymentProfile !== "dev-local-0.1"
+        ) {
+          return problem(
+            response,
+            500,
+            "MISCONFIGURED_ISSUER",
+            "Non-dev deployment profiles require issuanceAuthenticator",
+          );
+        }
         const accepts = exactMethods(parsed.data.accepts);
         const providerRequests = await options.providerRequests({
           purpose: parsed.data.purpose,
@@ -173,6 +227,14 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
         response.set("cache-control", "no-store, private");
         return response.status(201).json({ requirement });
       } catch (error) {
+        if (error instanceof IssuanceAuthorizationError) {
+          return problem(
+            response,
+            error.code === "UNAUTHENTICATED" ? 401 : 403,
+            error.code,
+            error.message,
+          );
+        }
         return problem(
           response,
           400,
@@ -228,8 +290,27 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   );
 
   router.get("/healthz", (_request, response) =>
-    response.json({ status: "ok", protocol: "x424", version: "0.1" }),
+    response.json({
+      status: "ok",
+      protocol: "x424",
+      version: "0.1",
+      profile: options.deploymentProfile ?? "dev-local-0.1",
+    }),
   );
+
+  router.get("/readyz", async (_request, response) => {
+    try {
+      // Readiness is extended by operators (Redis/Postgres ping). Base check:
+      // router is serving and service is constructed.
+      return response.json({
+        status: "ready",
+        protocol: "x424",
+        version: "0.1",
+      });
+    } catch {
+      return response.status(503).json({ status: "not_ready" });
+    }
+  });
 
   return router;
 }

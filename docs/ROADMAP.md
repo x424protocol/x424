@@ -6,6 +6,9 @@ x424 aims to make a unique-human dependency a configuration choice for HTTP
 resources, clients, and agents. The protocol earns that position through
 independent implementations and adoption, not by declaring itself a standard.
 
+The detailed work breakdown, phase gates, Problee adopter-zero track, and
+deliverable register are maintained in [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+
 ## Success measures
 
 x424 is on the standards path when:
@@ -34,8 +37,11 @@ Purpose: freeze a testable first contract and remove basic adopter glue.
 - [x] Generic HTTP verifier resolver and one-retry client
 - [x] Injectable requirement storage and Redis atomic state implementation
 - [ ] Reproducible npm release with provenance and package smoke tests
-- [ ] Complete end-to-end World browser example using only public APIs
+      (pack:smoke + release workflow present; publish/tag not authorized)
+- [x] Complete end-to-end World browser example using only public APIs
+      (`examples/world-browser/`; fake provider fixtures; legacy off by default)
 - [ ] External review of the 0.1 wire and threat model
+      (engagement package in `docs/program/EXTERNAL_ENGAGEMENTS.md`)
 
 Exit: an external developer can run the complete local flow from the README and
 identify every non-production component.

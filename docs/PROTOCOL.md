@@ -88,18 +88,37 @@ Rules:
 
 ### 3.1 Request digest
 
-x424/0.1 reference canonicalization computes:
+x424/0.1 interoperability-candidate canonicalization (`x424-canon-0.1`) computes:
 
 ```text
-bodyDigest = body absent ? null : sha256(canonical-json(body))
 requestDigest = sha256(canonical-json({ uppercase method, uri, bodyDigest }))
 ```
 
-The TypeScript reference uses lexicographically sorted JSON object keys and
-base64url SHA-256 digests prefixed `sha256:`. This is an implementation profile,
-not a claim of RFC 8785 conformance. A future protocol version may adopt a
-formal cross-language canonicalization profile; independent implementations
-MUST match the published x424 vectors before claiming 0.1 interoperability.
+`bodyDigest` selection (ADR-0002):
+
+| Body kind                                   | bodyDigest                            |
+| ------------------------------------------- | ------------------------------------- |
+| Absent or empty (`0` octets)                | `null`                                |
+| JSON object or array                        | `sha256(canonical-json(value))`       |
+| Opaque bytes                                | `sha256:` + base64url(SHA-256(bytes)) |
+| Stream / unknown without precomputed digest | fail closed                           |
+
+The profile uses lexicographically sorted JSON object keys and base64url
+SHA-256 digests prefixed `sha256:`. It is not a claim of RFC 8785 conformance.
+Independent implementations MUST match the published x424 vectors before
+claiming 0.1 interoperability. See `docs/decisions/0002-request-digest-bodies.md`
+and `docs/decisions/0003-canonicalization-candidate.md`.
+
+### 3.2 Transport profile
+
+HTTP 424 + `HUMAN-REQUIRED` remains the canonical challenge. Implementations
+MUST reject header values above 64 KiB. The interoperability envelope for
+inline headers is 8 KiB (ADR-0001); larger requirements SHOULD use a versioned
+`body` or `reference` transport without weakening integrity, expiry, or
+`Cache-Control: no-store, private`. Clients MUST NOT follow cross-origin
+redirects when reading challenges or attaching `HUMAN-PROOF`. CORS, when
+enabled for browser clients, MUST allowlist origins and expose `HUMAN-REQUIRED`,
+`HUMAN-PROOF`, and `HUMAN-RESULT`.
 
 ## 4. Exact method requirement
 
@@ -243,8 +262,10 @@ There are four separate replay controls:
 
 x424 result consumption does not replace application idempotency. Mutations
 SHOULD also require an `Idempotency-Key` so a lost success response can be
-retried without duplicating the business action. The application must define
-whether the same result may cover safe reads, a batch, or exactly one mutation.
+retried without duplicating the business action. Maintained resource middleware
+defaults to requiring `Idempotency-Key` on mutations. The application must
+define whether the same result may cover safe reads, a batch, or exactly one
+mutation. x424 guarantees declared dependency/result single use only.
 
 ## 10. Reference provider profile: World Proof of Human
 
