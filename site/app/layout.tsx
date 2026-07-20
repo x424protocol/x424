@@ -18,10 +18,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://x424.org"),
   title: "x424 — Human Dependency Protocol",
   description:
-    "HTTP-native unique-human requirements for users, agents, wallets, and APIs.",
+    "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs.",
   openGraph: {
     title: "x424 — Human Dependency Protocol",
-    description: "Make an HTTP action depend on one uniquely verified human.",
+    description:
+      "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs.",
     type: "website",
     url: "https://x424.org",
     images: [
@@ -36,7 +37,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "x424 — Human Dependency Protocol",
-    description: "Make an HTTP action depend on one uniquely verified human.",
+    description:
+      "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs.",
     images: ["/og.png"],
   },
   alternates: {

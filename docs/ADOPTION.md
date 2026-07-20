@@ -1,8 +1,19 @@
 # Adopting x424
 
+x424 makes unique humanity a native HTTP dependency—for users, agents, and
+APIs.
+
 x424 is a dependency protocol, not an account system. A relying party adopts
 x424 at its HTTP boundary while retaining its own authentication,
 authorization, identity lifecycle, and business rules.
+
+## When to use x424
+
+Use a provider such as World directly when the product needs only login or
+account enrollment. Use x424 when satisfying an accepted unique-human method
+is a condition for executing an HTTP action. The provider proves uniqueness,
+x424 standardizes the challenge and result, and the application authorizes the
+action.
 
 The division of responsibility and the measurable “off-the-shelf” bar are in
 [ADOPTER_CONTRACT.md](ADOPTER_CONTRACT.md).
@@ -111,10 +122,23 @@ request -> x424 dependency -> x402 payment -> authorization -> execution
 
 The final retry can carry both `HUMAN-PROOF` and the x402 payment payload. The
 proofs stay independent: satisfying one never weakens or implies the other.
+The maintained `composeX424BeforeX402()` and
+`fetchWithX424AndX402()` helpers fail closed if payment is evaluated first,
+preserve separate proof headers, and require replayable bodies (or an explicit
+body factory) across the three-request sequence.
+
+## Managed and self-hosted parity
+
+`ManagedVerifierClient` implements authenticated remote issuance, retained
+requirement lookup/deletion, and atomic result consumption. A resource server
+switches operators by changing its issuer/store configuration. In issuer mode,
+the adopter backend signs World RP request material and submits only that
+material; the managed verifier never receives the World RP signing key.
 
 ## Production boundary
 
-The reference router is demonstrative. A production verifier requires:
+The self-hosted image implements these controls but remains unaudited. A
+production verifier requires evidence for:
 
 - authenticated requirement issuance;
 - distributed atomic requirement, dependency nonce, provider-subject, and

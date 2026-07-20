@@ -9,6 +9,7 @@ import type {
   RequirementStore,
   ResultReplayStore,
 } from "./types.js";
+import type { RateLimitResult } from "./ops/limits.js";
 
 /** Minimal command surface implemented by the official `redis` client. */
 export interface RedisCommandClient {
@@ -28,6 +29,69 @@ const CONSUME_NONCE_SCRIPT = [
   "end",
   "return 0",
 ].join("\n");
+
+const RATE_LIMIT_SCRIPT = [
+  "local current = redis.call('INCR', KEYS[1])",
+  "if current == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end",
+  "local ttl = redis.call('PTTL', KEYS[1])",
+  "return {current, ttl}",
+].join("\n");
+
+export interface RedisRateLimiterOptions {
+  readonly client: RedisCommandClient;
+  readonly windowMs: number;
+  readonly maxRequests: number;
+  readonly keyPrefix?: string;
+}
+
+/** Shared fixed-window limiter for multi-instance verifier deployments. */
+export class RedisRateLimiter {
+  readonly #client: RedisCommandClient;
+  readonly #windowMs: number;
+  readonly #maxRequests: number;
+  readonly #prefix: string;
+
+  constructor(options: RedisRateLimiterOptions) {
+    if (
+      !Number.isInteger(options.windowMs) ||
+      options.windowMs < 1 ||
+      !Number.isInteger(options.maxRequests) ||
+      options.maxRequests < 1
+    ) {
+      throw new Error("Redis rate-limit window and maximum must be positive");
+    }
+    this.#client = options.client;
+    this.#windowMs = options.windowMs;
+    this.#maxRequests = options.maxRequests;
+    this.#prefix = options.keyPrefix ?? "x424:rate";
+  }
+
+  async consume(key: string, now = Date.now()): Promise<RateLimitResult> {
+    if (!key || /[\u0000\r\n]/u.test(key)) {
+      throw new Error("Invalid Redis rate-limit key");
+    }
+    const response = await this.#client.sendCommand([
+      "EVAL",
+      RATE_LIMIT_SCRIPT,
+      "1",
+      `${this.#prefix}:${key}`,
+      String(this.#windowMs),
+    ]);
+    if (!Array.isArray(response) || response.length !== 2) {
+      throw new Error("Redis returned an invalid rate-limit response");
+    }
+    const current = Number(response[0]);
+    const ttl = Math.max(0, Number(response[1]));
+    if (!Number.isFinite(current) || !Number.isFinite(ttl)) {
+      throw new Error("Redis returned an invalid rate-limit response");
+    }
+    return {
+      allowed: current <= this.#maxRequests,
+      remaining: Math.max(0, this.#maxRequests - current),
+      resetAt: now + ttl,
+    };
+  }
+}
 
 /**
  * Shared Redis 6.2+ state for a production-shaped x424 verifier.

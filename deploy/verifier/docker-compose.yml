@@ -2,8 +2,11 @@
 services:
   redis:
     image: redis:7.2-alpine
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
   verifier:
     build:
       context: ../..
@@ -11,12 +14,20 @@ services:
     ports:
       - "8080:8080"
     environment:
-      X424_DEPLOYMENT_PROFILE: eval-redis-0.2
-      X424_PAIRWISE_SECRET: "0123456789abcdef0123456789abcdef"
-      X424_RESULT_KEY_ID: x424-eval-1
-      # Replace with a real Ed25519 PEM in real eval deployments.
-      X424_RESULT_PRIVATE_KEY: "dev-only-replace"
-      X424_ISSUANCE_BEARER_TOKENS: "eval-token:issuer-1"
+      X424_DEPLOYMENT_PROFILE: dev-local-0.1
+      X424_PROVIDER_REQUEST_MODE: verifier
+      REDIS_URL: redis://redis:6379
+      X424_PAIRWISE_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      X424_EPHEMERAL_RESULT_KEY: "true"
+      X424_ISSUANCE_PRINCIPALS_JSON: >-
+        {"eval-token":{"subject":"sandbox","allowedPurposes":["sandbox"],"allowedAudiences":["https://api.example.test"],"allowedHttpMethods":["POST"],"allowedMethods":["world:proof-of-human"],"allowedResources":[{"origin":"https://api.example.test","pathPrefix":"/actions"}]}}
+      WORLD_APP_ID: app_staging_replace
+      WORLD_RP_ID: rp_staging_replace
+      WORLD_RP_SIGNING_KEY: "0xabababababababababababababababababababababababababababababababab"
+      WORLD_ACTION: x424-sandbox
+      WORLD_ENVIRONMENT: staging
+      WORLD_ALLOW_LEGACY_PROOFS: "false"
       PORT: "8080"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy

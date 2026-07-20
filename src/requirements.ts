@@ -45,6 +45,13 @@ export function createHumanRequirement(input: {
     }
     acceptedKeys.add(key);
   }
+  for (const key of Object.keys(input.providerRequests ?? {})) {
+    if (!acceptedKeys.has(key)) {
+      throw new Error(
+        `Provider request material names an unaccepted method: ${key}`,
+      );
+    }
+  }
   const now = input.now ?? new Date();
   const ttlSeconds = input.ttlSeconds ?? 300;
   if (!Number.isInteger(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 900) {

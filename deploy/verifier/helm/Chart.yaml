@@ -1,0 +1,6 @@
+apiVersion: v2
+name: x424-verifier
+description: Self-hosted x424 unique-human dependency verifier
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

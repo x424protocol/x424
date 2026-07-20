@@ -24,6 +24,11 @@ const EXAMPLE_UNIQUE_HUMAN = defineHumanMethodDescriptor({
 export const exampleProviderAdapter = defineHumanProviderAdapter({
   providerId: "example",
   methods: [EXAMPLE_UNIQUE_HUMAN],
+  validateProviderRequest: ({ providerRequest }) => {
+    if (providerRequest !== undefined) {
+      throw new Error("The example provider does not use request material");
+    }
+  },
   verify: async ({ proof }) => {
     // Replace this branch with exact provider cryptography or a pinned backend
     // verification API. Never trust fields copied directly from client JSON.

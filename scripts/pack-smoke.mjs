@@ -34,6 +34,12 @@ try {
       if (!digest.startsWith('sha256:')) throw new Error('core digest failed');
       await import('x424/client');
       await import('x424/adapters');
+      await import('x424/world');
+      await import('x424/fetch');
+      await import('x424/next');
+      await import('x424/express');
+      await import('x424/managed');
+      await import('x424/x402');
       await import('x424/middleware');
       await import('x424/postgres');
       console.log('pack-smoke ok', core.X424_VERSION, core.X424_CANON_PROFILE);

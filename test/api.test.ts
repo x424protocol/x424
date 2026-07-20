@@ -220,4 +220,84 @@ describe("reference HTTP API", () => {
       /nullifier|rawsecret|0xleaked|token=abc/i,
     );
   });
+
+  it("accepts adopter-signed World requests in authenticated issuer mode", async () => {
+    const profile = createWorldIdVerifierProfile({
+      appId: "app_test",
+      rpId: "rp_test",
+      action: "x424-test",
+      environment: "staging",
+      signingKeyHex: `0x${"ef".repeat(32)}`,
+      verifyRemote: async () => {
+        throw new Error("not called");
+      },
+    });
+    const service = new X424Service({
+      catalog: profile.catalog,
+      adapters: [profile.adapter],
+      nonceStore: new InMemoryNonceStore(),
+      providerReplayStore: new InMemoryProviderReplayStore(),
+      pairwiseSecret: generatePairwiseSecret(),
+      resultSigner: generateResultKeyPair().signer,
+    });
+    const app = express();
+    app.use(express.json({ limit: "256kb" }));
+    app.use(
+      createX424HttpRouter({
+        service,
+        allowIssuerProviderRequests: true,
+        deploymentProfile: "dev-local-0.1",
+        allowUnauthenticatedIssuance: true,
+      }),
+    );
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+    const binding = { kind: "agent_key", value: "sha256:managed" } as const;
+    const providerRequests = await profile.providerRequests({
+      binding,
+      accepts: profile.accepts,
+      ttlSeconds: 300,
+    });
+    const body = {
+      purpose: "test",
+      method: "POST",
+      uri: "https://api.example.test/action",
+      audience: "https://api.example.test",
+      binding,
+      accepts: profile.accepts,
+      providerRequests,
+    };
+
+    const accepted = await fetch(`${base}/v1/requirements`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(accepted.status).toBe(201);
+
+    const missing = await fetch(`${base}/v1/requirements`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...body, providerRequests: undefined }),
+    });
+    expect(missing.status).toBe(400);
+
+    const key = "world:proof-of-human";
+    const mismatched = {
+      ...providerRequests,
+      [key]: {
+        ...(providerRequests[key] as Record<string, unknown>),
+        action: "another-action",
+      },
+    };
+    const rejected = await fetch(`${base}/v1/requirements`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...body, providerRequests: mismatched }),
+    });
+    expect(rejected.status).toBe(400);
+  });
 });

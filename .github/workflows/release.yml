@@ -44,7 +44,81 @@ jobs:
           cd "$smoke_dir"
           npm init --yes
           npm install "$package_path"
-          node --input-type=module -e "await import('x424'); await import('x424/core'); await import('x424/client'); await import('x424/adapters'); await import('x424/providers/world-id'); await import('x424/providers/world-id/client'); await import('x424/redis'); await import('x424/express'); await import('x424/mcp')"
+          node --input-type=module -e "await import('x424'); await import('x424/core'); await import('x424/client'); await import('x424/adapters'); await import('x424/world'); await import('x424/providers/world-id/client'); await import('x424/redis'); await import('x424/express'); await import('x424/fetch'); await import('x424/next'); await import('x424/managed'); await import('x424/x402'); await import('x424/mcp')"
 
       - name: Publish with provenance
         run: npm publish --access public --provenance
+
+  verifier-image:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      artifact-metadata: write
+      contents: write
+      id-token: write
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: x424protocol/x424-verifier
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,format=long
+
+      - name: Build and push verifier
+        id: push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          file: deploy/verifier/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          artifact-name: x424-verifier-${{ github.ref_name }}.spdx.json
+          output-file: x424-verifier.spdx.json
+          format: spdx-json
+          upload-release-assets: false
+
+      - name: Attest image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest image SBOM
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: x424-verifier.spdx.json
+          push-to-registry: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign image with GitHub OIDC
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"

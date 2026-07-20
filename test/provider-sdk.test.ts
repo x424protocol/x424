@@ -34,6 +34,11 @@ describe("provider adapter SDK", () => {
     const adapter = defineHumanProviderAdapter({
       providerId: "example",
       methods: [method],
+      validateProviderRequest: ({ providerRequest }) => {
+        if (providerRequest !== undefined) {
+          throw new Error("Example method does not use provider requests");
+        }
+      },
       verify: async () => ({
         providerId: "example",
         methodId: "unique-human",
@@ -67,6 +72,7 @@ describe("provider adapter SDK", () => {
     const report = inspectHumanProviderAdapter({
       providerId: "another-provider",
       methods: () => [method],
+      validateProviderRequest: () => undefined,
       verify: async () => {
         throw new Error("not called");
       },
@@ -81,6 +87,7 @@ describe("provider adapter SDK", () => {
     const adapter = defineHumanProviderAdapter({
       providerId: "example",
       methods: [method],
+      validateProviderRequest: () => undefined,
       verify: async () => {
         throw new Error("not called");
       },

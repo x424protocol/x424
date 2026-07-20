@@ -18,3 +18,7 @@ A conforming implementation must:
 Passing these vectors proves x424 wire compatibility only. Provider adapters
 also require provider-native positive and negative fixtures, binding tests,
 replay tests, privacy review, and operational security review.
+
+The maintained World profile adds its provider-request validation bundle under
+`conformance/world-v1/`. It is a provider-profile gate, not a change to the
+provider-neutral 0.1 wire vectors.

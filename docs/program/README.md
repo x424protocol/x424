@@ -1,9 +1,9 @@
 # Program control artifacts
 
-These files are the repository-controlled evidence for Phase 0 of
-[EXECUTION_PLAN.md](../EXECUTION_PLAN.md). They do not replace normative
-protocol authority. Authority remains PROTOCOL.md, schemas, vectors,
-GOVERNANCE.md, SECURITY.md, ADOPTER_CONTRACT.md, then ROADMAP.md.
+These files are the repository-controlled evidence for the public release gates
+in [ROADMAP.md](../ROADMAP.md). They do not replace normative protocol
+authority. Authority remains PROTOCOL.md, schemas, vectors, GOVERNANCE.md,
+SECURITY.md, ADOPTER_CONTRACT.md, then ROADMAP.md.
 
 | Artifact                                           | Deliverable | Purpose                                          |
 | -------------------------------------------------- | ----------- | ------------------------------------------------ |
@@ -14,7 +14,7 @@ GOVERNANCE.md, SECURITY.md, ADOPTER_CONTRACT.md, then ROADMAP.md.
 | [EXTERNAL_ENGAGEMENTS.md](EXTERNAL_ENGAGEMENTS.md) | P0-05       | Recruitment packages; not fabricated commitments |
 | [THREAT_DATA_FLOW.md](THREAT_DATA_FLOW.md)         | P0-02       | Roles, trust boundaries, sensitive data flows    |
 | [REQUIREMENT_IDS.md](REQUIREMENT_IDS.md)           | P0-03       | Stable MUST/SHOULD identifiers and vector map    |
-| [DELIVERABLE_REGISTER.md](DELIVERABLE_REGISTER.md) | P0-01       | Status and evidence links by Appendix B ID       |
+| [DELIVERABLE_REGISTER.md](DELIVERABLE_REGISTER.md) | gates       | Status and evidence links by release gate        |
 
 GitHub epics, issue labels, and named human owners require repository write
 authorization and cannot be fabricated here. Until authorized, this register is

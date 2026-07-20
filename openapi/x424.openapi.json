@@ -3,7 +3,7 @@
   "info": {
     "title": "x424 Unique-Human Dependency API",
     "version": "0.1.0",
-    "description": "Reference API for issuing and satisfying HTTP-native unique-human dependencies. A successful result is evidence for one bound dependency, not general identity or application authorization."
+    "description": "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs. This reference API issues and satisfies exact unique-human dependencies; a successful result is evidence for one bound dependency, not general identity or application authorization."
   },
   "servers": [
     {
@@ -13,11 +13,34 @@
   ],
   "security": [{ "bearerAuth": [] }],
   "paths": {
+    "/.well-known/x424-verifier": {
+      "get": {
+        "operationId": "getVerifierMetadata",
+        "summary": "Fetch authenticated signed verifier metadata",
+        "responses": {
+          "200": {
+            "description": "Signed x424-verifier-metadata+jws document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["token"],
+                  "properties": {
+                    "token": { "type": "string", "maxLength": 65536 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/requirements": {
       "post": {
         "operationId": "createHumanRequirement",
         "summary": "Create a short-lived unique-human dependency",
-        "description": "The trusted verifier adds provider-native signed request material. Deployments must authenticate and authorize this endpoint.",
+        "description": "Deployments must authenticate and authorize this endpoint. Exactly one configured source supplies provider-native request material: the self-hosted verifier generates it, or an authenticated adopter backend supplies signed material that the provider adapter validates. Provider signing keys are never submitted.",
         "requestBody": {
           "required": true,
           "content": {
@@ -56,6 +79,55 @@
           },
           "400": { "$ref": "#/components/responses/Problem" },
           "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requirements/{dependencyId}": {
+      "get": {
+        "operationId": "getHumanRequirementState",
+        "summary": "Read retained requirement state for an authenticated resource server",
+        "parameters": [
+          {
+            "name": "dependencyId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retained server-issued dependency",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["requirement"],
+                  "properties": {
+                    "requirement": {
+                      "$ref": "#/components/schemas/HumanRequirement"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteHumanRequirementState",
+        "summary": "Delete retained requirement state after acceptance",
+        "parameters": [
+          {
+            "name": "dependencyId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Deleted or already absent" }
         }
       }
     },
@@ -106,6 +178,50 @@
           "400": { "$ref": "#/components/responses/Problem" },
           "404": { "$ref": "#/components/responses/Problem" },
           "422": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/results/{resultId}/consume": {
+      "post": {
+        "operationId": "consumeHumanResult",
+        "summary": "Atomically consume one result for an authenticated resource server",
+        "parameters": [
+          {
+            "name": "resultId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["expiresAt"],
+                "properties": {
+                  "expiresAt": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic consumption outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["consumed"],
+                  "properties": { "consumed": { "type": "boolean" } }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -235,6 +351,12 @@
             "minItems": 1,
             "maxItems": 10,
             "items": { "$ref": "#/components/schemas/HumanMethodRequirement" }
+          },
+          "providerRequests": {
+            "type": "object",
+            "maxProperties": 10,
+            "description": "Opaque adopter-signed provider request material keyed by providerId:methodId. Accepted only in authenticated issuer mode and validated by the selected provider adapter. Never contains a provider signing key.",
+            "additionalProperties": true
           },
           "ttlSeconds": {
             "type": "integer",

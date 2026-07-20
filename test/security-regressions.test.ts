@@ -65,7 +65,7 @@ describe("transport envelope", () => {
   it("does not emit oversized HUMAN-REQUIRED headers", () => {
     const hugeProviderRequests: Record<string, unknown> = {};
     // Inflate requirement past 8 KiB encoded.
-    hugeProviderRequests["world:proof-of-human"] = {
+    hugeProviderRequests["example:unique-human"] = {
       pad: "x".repeat(12_000),
     };
     const requirement = createHumanRequirement({

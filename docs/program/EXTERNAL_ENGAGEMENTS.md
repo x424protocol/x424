@@ -56,7 +56,8 @@ failure injection, load against named targets.
 - gate record suitable for 0.2 RC.
 
 **Status:** package ready; engagement not contracted.  
-**Lead-time risk:** 4–10 weeks; often critical path for Problee enforcement.
+**Lead-time risk:** 4–10 weeks; this is the critical path for production-value
+enforcement.
 
 ---
 
@@ -115,14 +116,14 @@ conformance, and operator-swap evidence.
 
 ## E6 — Unrelated production adopters
 
-**Objective:** two production relying parties unrelated to x424 and Problee
-maintainers, using public surfaces only.
+**Objective:** two production relying parties unrelated to x424 maintainers,
+using public surfaces only.
 
 **Acceptance criteria:**
 
 - public-surface adoption reports;
 - no private maintainer intervention required for interop;
-- no Problee-specific or privileged protocol path.
+- no adopter-specific or privileged protocol path.
 
 **Status:** onboarding package ready; adopters not recruited.  
 **Lead-time risk:** calendar-dominated; cannot be fabricated.
