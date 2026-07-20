@@ -4,7 +4,8 @@ The published image is a runnable non-root verifier, not a wiring skeleton. It
 serves authenticated requirement issuance, World proof verification,
 `/healthz`, and `/readyz`; retains requirements, dependency nonces, private
 provider-subject digests, result replay markers, and rate limits in Redis; and
-shuts down gracefully.
+same-operation result acceptances, encrypted brokered handoffs, and rate limits
+in Redis; and shuts down gracefully.
 
 ## Local evaluation
 
@@ -33,9 +34,11 @@ Exactly one mode is accepted at startup.
 
 `prod-ha-0.2` rejects exported `X424_RESULT_PRIVATE_KEY` and
 `X424_PAIRWISE_SECRET`. Mount a JavaScript module and set `X424_KEY_MODULE` to
-its absolute path. It must export `resultSigner` and `pairwiseDeriver` objects
-implementing the public non-exportable interfaces in `x424/core`. The module is
-the integration point for the operator's KMS/HSM; no key bytes enter x424.
+its absolute path. It must export `resultSigner`, `pairwiseDeriver`, and
+`handoffStateProtector` objects implementing the public non-exportable
+interfaces. The module is the integration point for the operator's KMS/HSM; no
+key bytes enter x424. Development/evaluation profiles instead require an exact
+32-byte `X424_HANDOFF_STATE_KEY`; never reuse it between environments.
 
 ## Required production controls
 
@@ -43,6 +46,8 @@ the integration point for the operator's KMS/HSM; no key bytes enter x424.
   network access
 - least-privilege token principals in `X424_ISSUANCE_PRINCIPALS_JSON`
 - a mounted KMS/HSM module and published signed verifier metadata
+- encrypted handoff state, capability-digest storage, and the brokered-handoff
+  operational runbook
 - ingress TLS, request-size enforcement, network policy, and World-only egress
 - signed image verification, SBOM retention, and the runbooks in `docs/runbooks/`
 

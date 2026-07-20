@@ -7,10 +7,9 @@ import {
   fetchWithX424AndX402,
 } from "x424/x402";
 
-/** Works with a browser wallet signer or an agent-controlled delegated signer. */
+/** Browser/direct ceremony example. Agents use createX424AgentClient(). */
 export async function callPaidHumanApi(input: {
   readonly signer: ConstructorParameters<typeof ExactEvmScheme>[0];
-  readonly agentKeyFingerprint: string;
   readonly verifierUrl: string;
   readonly projectToken: string;
   readonly showWorldConnector: (uri: string) => void | Promise<void>;
@@ -26,7 +25,6 @@ export async function callPaidHumanApi(input: {
       headers: {
         "content-type": "application/json",
         "idempotency-key": crypto.randomUUID(),
-        "x-agent-key": input.agentKeyFingerprint,
       },
       body: JSON.stringify({ action: "run" }),
     },

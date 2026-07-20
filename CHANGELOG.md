@@ -8,6 +8,13 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ### Fixed
 
+- Closed the x424-before-x402 replay gap: mutation results now permit only the
+  same result, idempotency key, and exact request digest across the 402 retry;
+  any different operation is replay.
+- Successful direct and brokered verification now retains the requirement
+  until resource acceptance instead of deleting the policy state before the
+  returned result can be evaluated. Failed proof attempts still fail closed.
+
 - The local World fixture flow now keeps verifier and resource requirement
   state separate, permits HTTP only for localhost evaluation, supplies the
   accepted World assurance label, and fails unless the protected retry returns
@@ -16,6 +23,14 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
   clipping desktop content on mobile viewports.
 
 ### Security
+
+- Added capability-scoped brokered handoff with digest-only capability
+  storage, encrypted provider state/completion, one active handoff per
+  dependency, and atomic compare-and-swap polling.
+- Added the `x424-agent` HTTP Message Signatures profile with ≤60-second
+  signatures, exact method/URI/body/proof/payment coverage, dependency nonce,
+  Ed25519 JWK thumbprints, EIP-191 CAIP-10 keys, and ERC-1271 magic-value
+  validation.
 
 - Resource middleware now re-validates current method, URI, body digest,
   audience, purpose, and caller binding before accepting HUMAN-PROOF; eval/prod
@@ -36,6 +51,16 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
   accepts explicit `bodyInput` kinds.
 
 ### Added
+
+- `ResultAcceptanceStore` with in-memory, Redis, PostgreSQL, managed-verifier,
+  and authenticated HTTP acceptance adapters.
+- `x424/handoff`, public handoff endpoints, managed client methods, Redis and
+  PostgreSQL handoff stores, and a public-IDKit World handoff adapter.
+- `x424/agent`, `createX424AgentClient()`, callback/terminal/NDJSON presenters,
+  and the `x424-agent` CLI with shell-free external signer execution and stable
+  exit codes.
+- AgentKit prior-art acknowledgment pinned to its reviewed public commit;
+  AgentKit remains absent from core dependencies and runtime.
 
 - A one-command, CI-enforced local quickstart plus public maturity/evidence
   matrix for developer onboarding.
@@ -88,6 +113,13 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 - Provenance-enabled npm release workflow with packed-package smoke tests.
 
 ### Changed
+
+- Production mutations require `ResultAcceptanceStore` and
+  `Idempotency-Key`; `ResultReplayStore` remains for reads and 0.1
+  compatibility.
+- Documented the public IDKit session-resume limitation: unexpected verifier
+  restart fails active World handoffs closed with `WORLD_SESSION_LOST` and
+  remains outside the `prod-ha-0.2` gate.
 
 - Standardized public maturity language on “x424/0.1 developer preview ·
   unaudited” and aligned README, website, security, roadmap, and package-facing

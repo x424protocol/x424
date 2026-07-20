@@ -3,10 +3,10 @@
  */
 
 const SENSITIVE_KEY =
-  /^(native_?proof|nativeProof|proof|nullifier(_?hash)?|provider_?subject|providerSubject|pairwise_?secret|pairwiseSecret|private_?key|privateKey|signing_?key(_?hex)?|signingKey(Hex)?|signal|merkle_?root|credential_?type|authorization|bearer|token|secret|password|seed)$/i;
+  /^(native_?proof|nativeProof|human_?proof|humanProof|proof|nullifier(_?hash)?|provider_?subject|providerSubject|provider_?session|providerSession|pairwise_?secret|pairwiseSecret|private_?key|privateKey|signing_?key(_?hex)?|signingKey(Hex)?|signal|merkle_?root|credential_?type|authorization|bearer|token|access_?token(_?digest)?|accessToken(Digest)?|connector_?uri|connectorUri|presentation|protected_?state|protectedState|protected_?completion|protectedCompletion|secret|password|seed)$/i;
 
 const SENSITIVE_SUBSTRING =
-  /nullifier|nativeproof|native_proof|pairwisesecret|private.?key|signingkey|bearer\s+[a-z0-9._-]+/i;
+  /nullifier|nativeproof|native_proof|humanproof|human_proof|pairwisesecret|private.?key|signingkey|access.?token|connector.?uri|bearer\s+[a-z0-9._-]+/i;
 
 export function normalizeKey(key: string): string {
   return key.replace(/[-_]/g, "").toLowerCase();
@@ -17,10 +17,12 @@ function keyIsSensitive(key: string): boolean {
   const normalized = normalizeKey(key);
   return [
     "nativeproof",
+    "humanproof",
     "proof",
     "nullifier",
     "nullifierhash",
     "providersubject",
+    "providersession",
     "pairwisesecret",
     "privatekey",
     "signingkey",
@@ -29,6 +31,12 @@ function keyIsSensitive(key: string): boolean {
     "merkleroot",
     "authorization",
     "token",
+    "accesstoken",
+    "accesstokendigest",
+    "connectoruri",
+    "presentation",
+    "protectedstate",
+    "protectedcompletion",
     "secret",
   ].includes(normalized);
 }
@@ -75,9 +83,15 @@ export function assertNoSensitiveLeak(text: string): void {
     "nullifier",
     "nativeproof",
     "native_proof",
+    "humanproof",
+    "human_proof",
     "pairwisesecret",
     "private_key",
     "signingkeyhex",
+    "accesstoken",
+    "access_token",
+    "connectoruri",
+    "connector_uri",
     "-----begin",
   ]) {
     if (lowered.includes(needle)) {

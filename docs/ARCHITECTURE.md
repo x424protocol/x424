@@ -132,6 +132,42 @@ Durable agent ownership, delegation, budgets, and revocation belong in a
 separate relationship/authorization system. x424 result tokens may be inputs to
 that system but are never bearer mandates.
 
+Agent key possession uses the `x424-agent` HTTP Message Signatures profile in
+`x424/agent`. The signature covers `@method`, `@target-uri`, `content-digest`
+for requests with bodies, and the separate `human-proof` and
+`payment-signature` fields when present. Resource servers call
+`verifyX424AgentRequest()` before constructing an `agent_key` binding. The
+returned binding proves control of the named Ed25519, EIP-191, or ERC-1271 key
+for that exact signed request; it is not authorization, ownership, or
+delegation.
+
+### Brokered handoff
+
+Trusted browser clients may submit a provider-native proof directly. Remote or
+unattended agents use `x424/handoff` by default:
+
+1. the agent starts one handoff using the exact dependency ID, nonce, provider,
+   and method;
+2. the verifier returns a short-lived bearer capability and connector URI;
+3. the human completes the provider ceremony outside the agent process;
+4. the agent polls with the capability; and
+5. completion returns only the signed `HUMAN-PROOF`.
+
+The verifier encrypts opaque provider session material at rest. The handoff
+store keeps only the capability digest, provides a compare-and-swap polling
+claim with a bounded lease that another verifier can reclaim after process
+loss, and permits one active handoff per dependency. Connector URIs, bearer
+capabilities, provider subjects, and native proofs are excluded from logs and
+telemetry. Redis and PostgreSQL adapters provide durable shared handoff state.
+
+World's current public IDKit request object is process-local and cannot be
+reconstructed after a verifier restart. The World adapter therefore fails
+closed with `WORLD_SESSION_LOST`; it never reaches into private IDKit bridge
+internals. Operators must drain active World handoffs during restart. A
+resumable public World session API or an equivalent reviewed recovery mechanism
+is required before the World brokered path can satisfy the `prod-ha-0.2`
+restart/failover gate.
+
 ## State and storage
 
 Minimum verifier state:
@@ -142,13 +178,17 @@ Minimum verifier state:
   raw provider subjects remain ephemeral;
 - pairwise-secret key version;
 - result signing-key metadata; and
-- replay state through result expiry.
+- replay state through result expiry;
+- encrypted handoff state, capability digest, status/version, and expiry; and
+- mutation result acceptance keyed by result ID, operation ID, exact request
+  digest, and expiry.
 
 Minimum relying-party state:
 
 - trusted verifier keys/configuration;
 - accepted immutable method descriptors;
-- consumed result IDs for mutations; and
+- result acceptances for mutations, allowing only the same result, operation
+  ID, and request digest during an idempotent retry; and
 - application authorization/idempotency records.
 
 Raw proofs should be processed in memory and excluded from logs, traces, error

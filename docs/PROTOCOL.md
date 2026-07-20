@@ -281,15 +281,57 @@ There are four separate replay controls:
    the verifier atomically retains a private digest of
    `(provider, method, scope, providerSubject)`.
 3. Dependency replay: the verifier atomically consumes `(dependencyId, nonce)`.
-4. Result replay: a state-changing resource server atomically consumes
-   `resultId` until token expiry.
+4. Result replay/acceptance: a read-only resource may atomically consume
+   `resultId`. A state-changing resource atomically accepts
+   `(resultId, operationId, requestDigest)` until token expiry. Repeating all
+   three values is the same idempotent operation; changing the operation,
+   method, URI, body, caller-bound digest, or result is replay.
 
-x424 result consumption does not replace application idempotency. Mutations
-SHOULD also require an `Idempotency-Key` so a lost success response can be
-retried without duplicating the business action. Maintained resource middleware
-defaults to requiring `Idempotency-Key` on mutations. The application must
-define whether the same result may cover safe reads, a batch, or exactly one
-mutation. x424 guarantees declared dependency/result single use only.
+x424 result acceptance does not replace application idempotency. Mutations
+MUST use `Idempotency-Key`; the value becomes `operationId`, is preserved across
+x424 and x402 retries, and must index an application-side idempotency record so
+a repeated accepted operation cannot repeat its effect. Maintained resource
+middleware requires `ResultAcceptanceStore` plus `Idempotency-Key` for
+production mutations. `ResultReplayStore` remains the read-only and 0.1
+compatibility surface.
+
+This distinction closes the three-request x424-before-x402 sequence: the first
+retry may validly establish the human dependency and receive 402; the final
+retry may present the same human result only when it carries the same
+idempotency key and exact request digest.
+
+## 9.1 Brokered handoff extension
+
+The optional `x424/handoff` extension does not change the 0.1 protected-resource
+wire contract. It adds verifier endpoints for remote human completion:
+
+- `POST /v1/requirements/{dependencyId}/handoffs` starts one handoff using the
+  exact dependency nonce and accepted provider/method;
+- `GET /v1/handoffs/{handoffId}` polls using the returned bearer capability;
+  and
+- `DELETE /v1/handoffs/{handoffId}` cancels it.
+
+Start returns a connector URI, expiry, bounded polling interval, and a random
+32-byte bearer capability. The verifier stores only the capability digest.
+Polling exposes only `pending`, `completed`, `failed`, `expired`, or
+`cancelled`; completed state includes the signed `HUMAN-PROOF`, never a native
+provider proof. Provider session and completion state are encrypted at rest.
+Completion and dependency-nonce consumption are atomic at the verifier
+boundary.
+
+## 9.2 Agent key-possession profile
+
+The optional `x424/agent` profile builds on RFC 9421 HTTP Message Signatures and
+RFC 9530 Content-Digest. The `x424-agent` label covers `@method`,
+`@target-uri`, `content-digest` for body-bearing requests, `human-proof` when
+present, and `payment-signature` when present. It requires `created`,
+`expires`, `keyid`, `alg`, `nonce`, and `tag="x424-agent"`; lifetime is at most
+60 seconds. Final retries use the x424 dependency ID as `nonce`.
+
+Initial key profiles are Ed25519 with an RFC 9278 JWK thumbprint URI, EIP-191
+with a CAIP-10 account ID, and ERC-1271 with the same signature base and the
+standard `0x1626ba7e` success value. Successful verification may construct an
+`agent_key` binding. It proves request-time key control only.
 
 ## 10. Reference provider profile: World Proof of Human
 

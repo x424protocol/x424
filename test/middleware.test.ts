@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryRequirementStore,
+  InMemoryResultAcceptanceStore,
   InMemoryResultReplayStore,
   defineHumanMethodDescriptor,
   defineMethodCatalog,
@@ -56,6 +57,7 @@ function baseOptions(overrides: Record<string, unknown> = {}) {
       verifier: keys.verifier,
       requirementStore: new InMemoryRequirementStore(),
       replayStore: new InMemoryResultReplayStore(),
+      resultAcceptanceStore: new InMemoryResultAcceptanceStore(),
       publicOrigin,
       requireIdempotencyKey: false,
       extractBinding: async () => ({

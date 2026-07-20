@@ -31,12 +31,13 @@ const x424 = createX424({
     publicKey: process.env.X424_RESULT_PUBLIC_KEY!,
   },
   extractBinding: async ({ headers }) => ({
-    kind: "agent_key",
-    value: headers.get("x-agent-key")!,
+    kind: "request",
+    value: headers.get("idempotency-key")!,
   }),
   requirementIssuer: managed,
   requirementStore: managed.requirementStore(),
   replayStore: managed.resultReplayStore(),
+  resultAcceptanceStore: managed.resultAcceptanceStore(),
   // Signed on this adopter backend; the managed verifier never sees the key.
   providerRequests: world.providerRequests,
   publicOrigin: { publicOrigin: "https://api.example.com" },

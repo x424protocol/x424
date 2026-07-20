@@ -233,6 +233,29 @@ export interface ResultReplayStore {
   ): Promise<boolean>;
 }
 
+export type ResultAcceptanceStatus = "new" | "same_operation" | "replay";
+
+export interface ResultAcceptanceInput {
+  readonly resultId: string;
+  /** Application Idempotency-Key. It identifies one state-changing operation. */
+  readonly operationId: string;
+  /** Exact x424 request digest stored in the accepted HumanResult. */
+  readonly requestDigest: string;
+  readonly expiresAt: IsoTimestamp;
+}
+
+/**
+ * Atomically binds a result to one idempotent mutation. Repeating the same
+ * result for the same operation is necessary for ordered dependency flows such
+ * as x424 -> x402; every other reuse is a replay.
+ */
+export interface ResultAcceptanceStore {
+  accept(
+    input: ResultAcceptanceInput,
+    now?: Date,
+  ): Promise<ResultAcceptanceStatus>;
+}
+
 export interface X424Problem {
   readonly type: "https://x424.org/problems/human-required";
   readonly title: "Unique human required";

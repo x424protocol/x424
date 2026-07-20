@@ -16,7 +16,10 @@ import {
   type RequestBodyDigestInput,
 } from "../canonical.js";
 import { InMemoryRequirementStore } from "../requirement-store.js";
-import { InMemoryResultReplayStore } from "../nonce-store.js";
+import {
+  InMemoryResultAcceptanceStore,
+  InMemoryResultReplayStore,
+} from "../nonce-store.js";
 import {
   HUMAN_PROOF_HEADER,
   humanRequiredResponse,
@@ -47,6 +50,7 @@ import type {
   HumanRequirement,
   HumanResult,
   RequirementStore,
+  ResultAcceptanceStore,
   ResultReplayStore,
 } from "../types.js";
 
@@ -94,6 +98,8 @@ export interface ProtectOptions {
   readonly requirementIssuer?: RequirementIssuer;
   /** Required for mutations on eval/prod; required for all state-changing acceptance. */
   readonly replayStore?: ResultReplayStore;
+  /** Required for idempotent mutations outside dev-local. */
+  readonly resultAcceptanceStore?: ResultAcceptanceStore;
   readonly publicOrigin: PublicOriginConfig;
   readonly ttlSeconds?: number;
   readonly requireIdempotencyKey?: boolean;
@@ -137,10 +143,26 @@ export function assertProtectOptions(options: ProtectOptions): void {
   }
   if (
     options.deploymentProfile !== "dev-local-0.1" &&
+    !options.resultAcceptanceStore
+  ) {
+    throw new Error(
+      "ResultAcceptanceStore is required for eval/prod mutation profiles",
+    );
+  }
+  if (
+    options.deploymentProfile !== "dev-local-0.1" &&
     options.requirementStore instanceof InMemoryRequirementStore
   ) {
     throw new Error(
       "InMemoryRequirementStore is not permitted outside dev-local",
+    );
+  }
+  if (
+    options.deploymentProfile !== "dev-local-0.1" &&
+    options.resultAcceptanceStore instanceof InMemoryResultAcceptanceStore
+  ) {
+    throw new Error(
+      "InMemoryResultAcceptanceStore is not permitted outside dev-local",
     );
   }
   if (
@@ -283,17 +305,24 @@ async function acceptHumanProof(
     readonly uri: string;
     readonly binding: HumanBinding;
     readonly bodyInput: RequestBodyDigestInput;
+    readonly operationId?: string;
   },
 ): Promise<{ requirement: HumanRequirement; result: HumanResult }> {
   const now = options.now?.() ?? new Date();
   const mutation = !["GET", "HEAD", "OPTIONS"].includes(
     current.method.toUpperCase(),
   );
-  if (
-    (mutation || options.deploymentProfile !== "dev-local-0.1") &&
-    !options.replayStore
-  ) {
+  if (options.deploymentProfile !== "dev-local-0.1" && !options.replayStore) {
     throw new Error("ResultReplayStore is required for this profile");
+  }
+  if (
+    mutation &&
+    options.deploymentProfile !== "dev-local-0.1" &&
+    (!options.resultAcceptanceStore || !current.operationId)
+  ) {
+    throw new Error(
+      "ResultAcceptanceStore and Idempotency-Key are required for mutations",
+    );
   }
 
   const preview = verifyHumanResultToken(humanProof, options.verifier);
@@ -315,18 +344,43 @@ async function acceptHumanProof(
     audience: options.audience,
   });
 
+  const useAcceptance =
+    mutation &&
+    options.resultAcceptanceStore !== undefined &&
+    current.operationId !== undefined;
   const result = await verifyHumanProofHeader({
     humanProof,
     requirement,
     verifier: options.verifier,
     catalog: options.catalog,
-    ...(options.replayStore ? { replayStore: options.replayStore } : {}),
+    ...(!useAcceptance && options.replayStore
+      ? { replayStore: options.replayStore }
+      : {}),
     requireReplayStore:
-      mutation || options.deploymentProfile !== "dev-local-0.1",
+      !useAcceptance &&
+      (mutation || options.deploymentProfile !== "dev-local-0.1"),
     now,
   });
-  // Deletion is cleanup only — replay store is the acceptance gate.
-  await options.requirementStore.delete(requirement.dependencyId);
+  if (useAcceptance) {
+    const status = await options.resultAcceptanceStore!.accept(
+      {
+        resultId: result.resultId,
+        operationId: current.operationId!,
+        requestDigest: result.requestDigest,
+        expiresAt: result.expiresAt,
+      },
+      now,
+    );
+    if (status === "replay") {
+      throw new Error("x424 result token was replayed for another operation");
+    }
+  }
+  // Mutation requirements remain available until TTL so the same idempotent
+  // operation can cross another dependency such as x402. Acceptance state is
+  // the gate; requirement deletion is only eager cleanup for one-shot reads.
+  if (!mutation) {
+    await options.requirementStore.delete(requirement.dependencyId);
+  }
   return { requirement, result };
 }
 
@@ -414,6 +468,9 @@ export function createExpressHumanDependencyMiddleware(
         uri,
         binding,
         bodyInput,
+        ...(request.get("idempotency-key")
+          ? { operationId: request.get("idempotency-key")! }
+          : {}),
       });
       (request as ExpressRequest & { x424Result?: HumanResult }).x424Result =
         result;
@@ -543,6 +600,9 @@ export async function protectFetchResource(
         uri,
         binding,
         bodyInput,
+        ...(request.headers.get("idempotency-key")
+          ? { operationId: request.headers.get("idempotency-key")! }
+          : {}),
       },
     );
     return { result, requirement };

@@ -18,4 +18,25 @@ describe("proof-safe redaction", () => {
       /Sensitive field leaked/,
     );
   });
+
+  it("redacts brokered-handoff capabilities, presentation, and provider state", () => {
+    const redacted = redactForTelemetry({
+      handoffId: "handoff-public",
+      accessToken: "capability-secret",
+      accessTokenDigest: "sha256:private",
+      presentation: { kind: "uri", uri: "https://connector.example/private" },
+      providerSession: { requestId: "private" },
+      protectedState: "ciphertext",
+      humanProof: "signed-result",
+    }) as Record<string, unknown>;
+    expect(redacted).toEqual({
+      handoffId: "handoff-public",
+      accessToken: "[redacted]",
+      accessTokenDigest: "[redacted]",
+      presentation: "[redacted]",
+      providerSession: "[redacted]",
+      protectedState: "[redacted]",
+      humanProof: "[redacted]",
+    });
+  });
 });

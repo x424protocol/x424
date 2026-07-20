@@ -181,6 +181,97 @@
         }
       }
     },
+    "/v1/requirements/{dependencyId}/handoffs": {
+      "post": {
+        "operationId": "startHumanHandoff",
+        "summary": "Start a provider-neutral brokered human handoff",
+        "description": "Starts one short-lived handoff for the exact dependency nonce and accepted provider method. Provider session material remains encrypted inside the verifier. The returned access token is a bearer capability and must not be logged.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "dependencyId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/StartHumanHandoff" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending handoff and its short-lived bearer capability",
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-store, private" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StartedHumanHandoff" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/handoffs/{handoffId}": {
+      "get": {
+        "operationId": "getHumanHandoff",
+        "summary": "Poll a brokered handoff",
+        "description": "Returns only protocol handoff state. Completion returns a signed HUMAN-PROOF and never the provider-native proof.",
+        "security": [{ "handoffCapability": [] }],
+        "parameters": [
+          {
+            "name": "handoffId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current handoff state",
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string", "const": "no-store, private" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HumanHandoff" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "delete": {
+        "operationId": "cancelHumanHandoff",
+        "summary": "Cancel a brokered handoff",
+        "security": [{ "handoffCapability": [] }],
+        "parameters": [
+          {
+            "name": "handoffId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Handoff cancelled" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
     "/v1/results/{resultId}/consume": {
       "post": {
         "operationId": "consumeHumanResult",
@@ -225,6 +316,48 @@
         }
       }
     },
+    "/v1/results/{resultId}/acceptances": {
+      "post": {
+        "operationId": "acceptHumanResultOperation",
+        "summary": "Atomically accept a result for one idempotent mutation",
+        "description": "The same result may be accepted again only for the same operationId and requestDigest. A different operation, method, URI, body, or caller-bound digest returns replay.",
+        "parameters": [
+          {
+            "name": "resultId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResultAcceptance" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic acceptance outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status"],
+                  "properties": {
+                    "status": { "enum": ["new", "same_operation", "replay"] }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "getHealth",
@@ -258,6 +391,11 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Deployment-issued caller authentication. This is separate from HUMAN-PROOF."
+      },
+      "handoffCapability": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Short-lived per-handoff bearer capability. Verifiers store only its digest and exclude it from logs and telemetry."
       }
     },
     "responses": {
@@ -441,6 +579,122 @@
           "nativeProof": {
             "description": "Opaque provider-native proof; never log this field."
           }
+        }
+      },
+      "StartHumanHandoff": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["nonce", "providerId", "methodId"],
+        "properties": {
+          "nonce": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "providerId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "methodId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          }
+        }
+      },
+      "HandoffPresentation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "uri"],
+        "properties": {
+          "kind": { "const": "uri" },
+          "uri": { "type": "string", "format": "uri", "maxLength": 4096 },
+          "userCode": { "type": "string", "maxLength": 100 }
+        }
+      },
+      "StartedHumanHandoff": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handoffId",
+          "accessToken",
+          "status",
+          "providerId",
+          "methodId",
+          "presentation",
+          "expiresAt",
+          "pollAfterMs"
+        ],
+        "properties": {
+          "handoffId": { "type": "string", "maxLength": 200 },
+          "accessToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Secret bearer capability; never log or persist in plaintext."
+          },
+          "status": { "const": "pending" },
+          "providerId": { "type": "string" },
+          "methodId": { "type": "string" },
+          "presentation": {
+            "$ref": "#/components/schemas/HandoffPresentation"
+          },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "pollAfterMs": { "type": "integer", "minimum": 500, "maximum": 10000 }
+        }
+      },
+      "HumanHandoff": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["handoffId", "status", "pollAfterMs", "expiresAt"],
+            "properties": {
+              "handoffId": { "type": "string" },
+              "status": { "const": "pending" },
+              "pollAfterMs": { "type": "integer" },
+              "expiresAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["handoffId", "status", "humanProof", "expiresAt"],
+            "properties": {
+              "handoffId": { "type": "string" },
+              "status": { "const": "completed" },
+              "humanProof": { "type": "string", "maxLength": 65536 },
+              "expiresAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["handoffId", "status", "code", "expiresAt"],
+            "properties": {
+              "handoffId": { "type": "string" },
+              "status": { "const": "failed" },
+              "code": { "type": "string", "maxLength": 100 },
+              "expiresAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["handoffId", "status", "expiresAt"],
+            "properties": {
+              "handoffId": { "type": "string" },
+              "status": { "enum": ["expired", "cancelled"] },
+              "expiresAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        ]
+      },
+      "ResultAcceptance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "requestDigest", "expiresAt"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+          },
+          "expiresAt": { "type": "string", "format": "date-time" }
         }
       },
       "HumanResult": {

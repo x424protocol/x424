@@ -3,8 +3,13 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AesGcmHandoffStateProtector,
+  HumanHandoffService,
+  InMemoryHandoffStore,
   InMemoryNonceStore,
   InMemoryProviderReplayStore,
+  InMemoryRequirementStore,
+  InMemoryResultAcceptanceStore,
   X424Service,
   createWorldIdVerifierProfile,
   createX424HttpRouter,
@@ -121,6 +126,10 @@ describe("reference HTTP API", () => {
     const verifiedText = await verified.text();
     expect(verifiedText).not.toContain("never-public");
     expect(verifiedText).toContain("x424_human_");
+    const retained = await fetch(
+      `${base}/v1/requirements/${createdBody.requirement.dependencyId}`,
+    );
+    expect(retained.status).toBe(200);
   });
 
   it("never echoes adapter secrets in public problems or telemetry", async () => {
@@ -299,5 +308,134 @@ describe("reference HTTP API", () => {
       body: JSON.stringify({ ...body, providerRequests: mismatched }),
     });
     expect(rejected.status).toBe(400);
+  });
+
+  it("exposes capability-scoped handoffs and idempotent result acceptances", async () => {
+    const profile = createWorldIdVerifierProfile({
+      appId: "app_test",
+      rpId: "rp_test",
+      action: "x424-test",
+      environment: "staging",
+      signingKeyHex: `0x${"12".repeat(32)}`,
+      verifyRemote: async () => {
+        throw new Error("not called while handoff is pending");
+      },
+    });
+    const requirements = new InMemoryRequirementStore();
+    const service = new X424Service({
+      catalog: profile.catalog,
+      adapters: [profile.adapter],
+      nonceStore: new InMemoryNonceStore(),
+      providerReplayStore: new InMemoryProviderReplayStore(),
+      pairwiseSecret: generatePairwiseSecret(),
+      resultSigner: generateResultKeyPair().signer,
+    });
+    const handoffService = new HumanHandoffService({
+      service,
+      requirementStore: requirements,
+      store: new InMemoryHandoffStore(),
+      protector: new AesGcmHandoffStateProtector(new Uint8Array(32).fill(5)),
+      adapters: [
+        {
+          providerId: "world",
+          methodIds: ["proof-of-human"],
+          startHandoff: async ({ requirement }) => ({
+            providerSession: { secret: "never-public" },
+            presentation: {
+              kind: "uri",
+              uri: "https://connector.example.test/private",
+            },
+            expiresAt: requirement.expiresAt,
+          }),
+          pollHandoff: async () => ({ status: "pending" }),
+        },
+      ],
+    });
+    const app = express();
+    app.use(express.json({ limit: "256kb" }));
+    app.use(
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: requirements,
+        handoffService,
+        resultAcceptanceStore: new InMemoryResultAcceptanceStore(),
+        deploymentProfile: "dev-local-0.1",
+        allowUnauthenticatedIssuance: true,
+      }),
+    );
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+
+    const created = await fetch(`${base}/v1/requirements`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        purpose: "test",
+        method: "POST",
+        uri: "https://api.example.test/action",
+        audience: "https://api.example.test",
+        binding: { kind: "agent_key", value: "sha256:test" },
+        accepts: profile.accepts,
+      }),
+    });
+    const { requirement } = (await created.json()) as {
+      requirement: HumanRequirement;
+    };
+    const startedResponse = await fetch(
+      `${base}/v1/requirements/${requirement.dependencyId}/handoffs`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          nonce: requirement.nonce,
+          providerId: "world",
+          methodId: "proof-of-human",
+        }),
+      },
+    );
+    expect(startedResponse.status).toBe(201);
+    const started = (await startedResponse.json()) as {
+      handoffId: string;
+      accessToken: string;
+    };
+    expect(started.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+
+    const unauthorized = await fetch(
+      `${base}/v1/handoffs/${started.handoffId}`,
+      { headers: { authorization: `Bearer ${"Z".repeat(43)}` } },
+    );
+    expect(unauthorized.status).toBe(401);
+    const pending = await fetch(`${base}/v1/handoffs/${started.handoffId}`, {
+      headers: { authorization: `Bearer ${started.accessToken}` },
+    });
+    expect(pending.status).toBe(200);
+    const pendingText = await pending.text();
+    expect(pendingText).toContain('"status":"pending"');
+    expect(pendingText).not.toContain("connector.example.test");
+    expect(pendingText).not.toContain("never-public");
+
+    const accept = (operationId: string) =>
+      fetch(`${base}/v1/results/result-1/acceptances`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          operationId,
+          requestDigest: requirement.resource.requestDigest,
+          expiresAt: requirement.expiresAt,
+        }),
+      });
+    await expect((await accept("operation-1")).json()).resolves.toEqual({
+      status: "new",
+    });
+    await expect((await accept("operation-1")).json()).resolves.toEqual({
+      status: "same_operation",
+    });
+    await expect((await accept("operation-2")).json()).resolves.toEqual({
+      status: "replay",
+    });
   });
 });

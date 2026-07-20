@@ -60,6 +60,11 @@ Purpose: make both self-hosted and managed verification operationally safe.
 - Redis/PostgreSQL failover, backup, restore, and concurrency profiles
 - [x] Maintained Fetch, Express, and Next.js resource middleware
 - [x] Managed verifier client and remote atomic-store adapters
+- [x] Same-operation mutation acceptance across x424-before-x402 retries
+- [x] Provider-neutral handoff API, encrypted state, capability digests, and
+      Redis/PostgreSQL compare-and-swap stores
+- [x] Agent key-possession profile, agent client, presenters, and safe CLI
+- [ ] Resumable World brokered sessions across verifier restart/failover
 - [x] Proof-safe errors, shared rate limits, egress controls, and runbooks
 - [ ] World staging, browser, mobile-web, REST, and agent-key matrices
 - [ ] Fuzz, dependency, load, chaos, security, and privacy assessment

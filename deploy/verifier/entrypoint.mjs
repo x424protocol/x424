@@ -13,11 +13,16 @@ import {
 } from "./dist/index.js";
 import { RedisRateLimiter, RedisX424Store } from "./dist/redis.js";
 import {
+  AesGcmHandoffStateProtector,
+  HumanHandoffService,
+} from "./dist/handoff.js";
+import {
   WorldIdAdapter,
   createWorldIdMethodRequirements,
   createWorldIdVerifierProfile,
 } from "./dist/providers/world-id.js";
 import { defineMethodCatalog } from "./dist/catalog.js";
+import { createWorldIdHandoffAdapter } from "./dist/providers/world-id-client.js";
 
 function required(name) {
   const value = process.env[name];
@@ -53,6 +58,14 @@ function localSecret(value) {
   return bytes;
 }
 
+function handoffStateProtector() {
+  const bytes = localSecret(required("X424_HANDOFF_STATE_KEY"));
+  if (bytes.byteLength !== 32) {
+    throw new Error("X424_HANDOFF_STATE_KEY must contain exactly 32 bytes");
+  }
+  return new AesGcmHandoffStateProtector(bytes);
+}
+
 function parsePrincipals() {
   let value;
   try {
@@ -77,14 +90,19 @@ async function keyBoundary(profile) {
       ? modulePath
       : pathToFileURL(modulePath).href;
     const loaded = await import(moduleUrl);
-    if (!loaded.resultSigner || !loaded.pairwiseDeriver) {
+    if (
+      !loaded.resultSigner ||
+      !loaded.pairwiseDeriver ||
+      !loaded.handoffStateProtector
+    ) {
       throw new Error(
-        "X424_KEY_MODULE must export resultSigner and pairwiseDeriver",
+        "X424_KEY_MODULE must export resultSigner, pairwiseDeriver, and handoffStateProtector",
       );
     }
     return {
       resultSigner: loaded.resultSigner,
       pairwiseDeriver: loaded.pairwiseDeriver,
+      handoffStateProtector: loaded.handoffStateProtector,
     };
   }
   if (profile === "prod-ha-0.2") {
@@ -94,6 +112,7 @@ async function keyBoundary(profile) {
     return {
       resultSigner: generateResultKeyPair("x424-local-ephemeral").signer,
       pairwiseSecret: localSecret(required("X424_PAIRWISE_SECRET")),
+      handoffStateProtector: handoffStateProtector(),
     };
   }
   const privateKey = required("X424_RESULT_PRIVATE_KEY").replaceAll(
@@ -107,6 +126,7 @@ async function keyBoundary(profile) {
       privateKey,
     },
     pairwiseSecret: localSecret(required("X424_PAIRWISE_SECRET")),
+    handoffStateProtector: handoffStateProtector(),
   };
 }
 
@@ -189,6 +209,13 @@ const service = new X424Service({
     ? { pairwiseDeriver: keys.pairwiseDeriver }
     : { pairwiseSecret: keys.pairwiseSecret }),
 });
+const handoffService = new HumanHandoffService({
+  service,
+  requirementStore: state.requirements,
+  store: state.handoffs,
+  protector: keys.handoffStateProtector,
+  adapters: [createWorldIdHandoffAdapter()],
+});
 const issuanceAuthenticator =
   createStaticBearerIssuanceAuthenticator(parsePrincipals());
 const metadataToken = process.env.X424_METADATA_TOKEN;
@@ -223,6 +250,9 @@ app.use(
     service,
     deploymentProfile: profile,
     requirementStore: state.requirements,
+    resultReplayStore: state.results,
+    resultAcceptanceStore: state.resultAcceptances,
+    handoffService,
     issuanceAuthenticator,
     rateLimiter,
     readinessCheck: async () => {
