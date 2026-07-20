@@ -10,6 +10,7 @@ import {
   InMemoryNonceStore,
   InMemoryProviderReplayStore,
   inspectHumanProviderAdapter,
+  sha256,
 } from "../src/core.js";
 
 const method = defineHumanMethodDescriptor({
@@ -41,7 +42,7 @@ describe("provider adapter SDK", () => {
         providerSubject: "private-subject",
         uniquenessScope: { kind: "relying_party", id: "example:rp" },
         verificationMode: "backend",
-        proofDigest: "sha256:proof",
+        proofDigest: sha256("proof"),
         verifiedAt: new Date().toISOString(),
       }),
     });

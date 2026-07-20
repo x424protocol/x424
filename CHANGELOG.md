@@ -6,8 +6,46 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+### Security
+
+- Resource middleware now re-validates current method, URI, body digest,
+  audience, purpose, and caller binding before accepting HUMAN-PROOF; eval/prod
+  require ResultReplayStore; publicOrigin replaces trusted X-Forwarded-* defaults.
+- Verifier proof submission uses redirect:manual, pins verifier origin, never
+  resends nativeProof after redirects, and requires HTTPS outside localhost opt-in.
+- Explicit body digest kinds; no inference of Blob/Date/class instances as JSON;
+  strict SHA-256 precomputed digest validation.
+- Body transport for requirements over the 8 KiB header envelope; never emit
+  oversized HUMAN-REQUIRED.
+- Strict base64url/JWS/metadata parsing with canonical round-trip checks.
+- Issuance authorization denies by default; empty grants deny; URI grants use
+  origin+path boundaries and reject encoded path traversal; deploymentProfile is
+  mandatory.
+- Public problem responses no longer echo adapter/provider error messages;
+  redaction covers snake_case/nullifier_hash and Error objects.
+- Wire digests require canonical `sha256:` + 32-byte base64url; issuance API
+  accepts explicit `bodyInput` kinds.
+
 ### Added
 
+- Program baseline controls under `docs/program/` (severity policy, deployment
+  profiles, conflict governance, threat/data-flow, requirement IDs, deliverable
+  register, external engagement packages).
+- Decision records ADR-0001..0004 (status: review-pending until independent
+  approval) for transport, body digests, canonicalization, and package topology.
+- HTTP transport helpers (CORS, header envelope, redirect safety) and expanded
+  request body digest profiles (`x424-canon-0.1`).
+- Authenticated issuance authorization interface and static bearer profile.
+- Signed verifier metadata document helpers with key validity/revocation checks.
+- KMS/HSM-oriented external result signing and pairwise secret version helpers.
+- Express and Fetch resource middleware with Idempotency-Key default on mutations.
+- PostgreSQL transactional state store profile and schema DDL.
+- Rate limiter, circuit breaker, provider egress allowlist, and proof-safe
+  redaction helpers.
+- Verifier container skeleton (`deploy/verifier`) with health/ready probes.
+- Black-box conformance CLI scaffold (`x424-conformance`).
+- World browser local-stack example using public APIs with legacy disabled.
+- Operational runbooks for key compromise, provider outage, state restore, abuse.
 - Redis-backed atomic requirement, dependency nonce, provider-subject, and
   result-replay state.
 - Injectable requirement storage for the Express verifier router.

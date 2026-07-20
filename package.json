@@ -56,13 +56,22 @@
       "types": "./dist/api/router.d.ts",
       "import": "./dist/api/router.js"
     },
+    "./middleware": {
+      "types": "./dist/middleware/resource.d.ts",
+      "import": "./dist/middleware/resource.js"
+    },
+    "./postgres": {
+      "types": "./dist/postgres/store.d.ts",
+      "import": "./dist/postgres/store.js"
+    },
     "./mcp": {
       "types": "./dist/mcp/server.d.ts",
       "import": "./dist/mcp/server.js"
     }
   },
   "bin": {
-    "x424-mcp-server": "./dist/mcp/cli.js"
+    "x424-mcp-server": "./dist/mcp/cli.js",
+    "x424-conformance": "./dist/conformance/cli.js"
   },
   "files": [
     "dist",
@@ -78,7 +87,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
-    "conformance": "vitest run test/provider-sdk.test.ts test/conformance.test.ts",
+    "conformance": "vitest run test/provider-sdk.test.ts test/conformance.test.ts && pnpm build && node dist/conformance/cli.js",
     "example": "tsx examples/http-flow.ts",
     "mcp": "tsx src/mcp/cli.ts",
     "mcp:http": "X424_MCP_TRANSPORT=http tsx src/mcp/cli.ts",
@@ -86,6 +95,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run --dir test",
     "release:check": "pnpm check && npm pack --dry-run",
+    "pack:smoke": "node scripts/pack-smoke.mjs",
     "prepack": "pnpm build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

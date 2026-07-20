@@ -35,8 +35,8 @@
     "audience": { "type": "string", "format": "uri", "maxLength": 2048 },
     "requestDigest": {
       "type": "string",
-      "pattern": "^sha256:",
-      "maxLength": 200
+      "pattern": "^sha256:[A-Za-z0-9_-]{43}$",
+      "maxLength": 50
     },
     "binding": {
       "type": "object",
@@ -73,8 +73,8 @@
     },
     "proofDigest": {
       "type": "string",
-      "pattern": "^sha256:",
-      "maxLength": 200
+      "pattern": "^sha256:[A-Za-z0-9_-]{43}$",
+      "maxLength": 50
     },
     "claim": { "type": "string", "minLength": 1, "maxLength": 2000 },
     "nonClaims": {

@@ -1,0 +1,22 @@
+# Evaluation compose for the verifier image. Not a production orchestrator profile.
+services:
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+  verifier:
+    build:
+      context: ../..
+      dockerfile: deploy/verifier/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      X424_DEPLOYMENT_PROFILE: eval-redis-0.2
+      X424_PAIRWISE_SECRET: "0123456789abcdef0123456789abcdef"
+      X424_RESULT_KEY_ID: x424-eval-1
+      # Replace with a real Ed25519 PEM in real eval deployments.
+      X424_RESULT_PRIVATE_KEY: "dev-only-replace"
+      X424_ISSUANCE_BEARER_TOKENS: "eval-token:issuer-1"
+      PORT: "8080"
+    depends_on:
+      - redis

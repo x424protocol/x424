@@ -107,12 +107,18 @@ use published vectors and compare byte-for-byte.
 
 - `InMemoryNonceStore`, `InMemoryRequirementStore`, and
   `InMemoryResultReplayStore` are single-process and lose state on restart.
-- `RedisX424Store` supplies atomic shared state, but production deployments must
-  still secure, monitor, back up, and test their Redis topology.
-- The router has no authentication, authorization, CORS policy, rate limiter,
-  durable audit, or abuse control.
+- `RedisX424Store` and `PostgresX424Store` supply atomic shared state profiles,
+  but production deployments must still secure, monitor, back up, and test
+  their topology against a named deployment profile.
+- Issuance authentication, rate limits, CORS, and metadata helpers exist as
+  composable interfaces; `dev-local-0.1` may omit them, while `eval-redis-0.2`
+  and `prod-ha-0.2` must enable them. The router refuses non-dev profiles
+  without an `issuanceAuthenticator`.
 - MCP tools intentionally do not accept raw provider proof material.
-- No independent audit, fuzz campaign, formal verification, or production load
-  test has been completed.
+- No independent audit, full intermediary matrix, formal verification, or
+  production load test has been completed. See
+  `docs/program/EXTERNAL_ENGAGEMENTS.md` and `docs/program/DELIVERABLE_REGISTER.md`.
 
 These are explicit non-production boundaries, not optional hardening.
+Severity and profile gates: `docs/program/SEVERITY_POLICY.md`,
+`docs/program/DEPLOYMENT_PROFILES.md`.

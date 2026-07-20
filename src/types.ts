@@ -223,4 +223,8 @@ export interface X424Problem {
   readonly status: 424;
   readonly detail: string;
   readonly dependencyId: string;
+  /** Transport selected for this challenge (ADR-0001). */
+  readonly x424Transport?: "header" | "body";
+  /** Present when x424Transport is `body` — never combine with oversized headers. */
+  readonly requirement?: HumanRequirement;
 }
