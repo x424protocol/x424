@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://x424.org/schemas/human-result-0.1.schema.json",
+  "title": "x424 HumanResult 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "x424Version",
+    "resultId",
+    "dependencyId",
+    "satisfied",
+    "purpose",
+    "audience",
+    "requestDigest",
+    "binding",
+    "providerId",
+    "methodId",
+    "descriptorVersion",
+    "pairwiseHumanId",
+    "uniquenessScope",
+    "verificationMode",
+    "proofDigest",
+    "claim",
+    "nonClaims",
+    "verifiedAt",
+    "issuedAt",
+    "expiresAt"
+  ],
+  "properties": {
+    "x424Version": { "const": "0.1" },
+    "resultId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "dependencyId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "satisfied": { "const": true },
+    "purpose": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "audience": { "type": "string", "format": "uri", "maxLength": 2048 },
+    "requestDigest": {
+      "type": "string",
+      "pattern": "^sha256:",
+      "maxLength": 200
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "enum": ["request", "wallet", "agent_key", "session"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "providerId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+    },
+    "methodId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$" },
+    "descriptorVersion": { "type": "string", "minLength": 1, "maxLength": 50 },
+    "assuranceLevel": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "pairwiseHumanId": {
+      "type": "string",
+      "pattern": "^x424_human_",
+      "maxLength": 200
+    },
+    "uniquenessScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["global", "relying_party", "action", "session"] },
+        "id": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "verificationMode": {
+      "enum": ["backend", "offchain", "onchain", "hybrid"]
+    },
+    "proofDigest": {
+      "type": "string",
+      "pattern": "^sha256:",
+      "maxLength": 200
+    },
+    "claim": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "nonClaims": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    },
+    "verifiedAt": { "type": "string", "format": "date-time" },
+    "issuedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "stateReferences": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+    }
+  }
+}

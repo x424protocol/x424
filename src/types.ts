@@ -1,0 +1,200 @@
+export const X424_VERSION = "0.1" as const;
+
+export type X424Version = typeof X424_VERSION;
+export type IsoTimestamp = string;
+
+/** Where an adapter validates the provider-native proof. */
+export type VerificationMode = "backend" | "offchain" | "onchain" | "hybrid";
+
+/**
+ * A provider's native anti-Sybil namespace. Scopes are deliberately not
+ * ordered: an action-scoped nullifier is not silently interchangeable with a
+ * relying-party identity or a global registry entry.
+ */
+export type UniquenessScopeKind =
+  "global" | "relying_party" | "action" | "session";
+
+export interface UniquenessScope {
+  readonly kind: UniquenessScopeKind;
+  readonly id: string;
+}
+
+export interface HumanMethodDescriptor {
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly version: string;
+  readonly status: "enabled" | "disabled";
+  readonly claim: string;
+  readonly nonClaims: readonly string[];
+  readonly assuranceLevels: readonly string[];
+  readonly nativeScopeKinds: readonly UniquenessScopeKind[];
+  readonly verificationModes: readonly VerificationMode[];
+  readonly pairwisePseudonym: boolean;
+  readonly replaySemantics: string;
+  readonly recoverySemantics: string;
+  readonly privacy: string;
+}
+
+export interface HumanMethodRequirement {
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly descriptorVersion: string;
+  readonly assuranceLevel?: string;
+  readonly acceptedScopeKinds: readonly UniquenessScopeKind[];
+  readonly maximumProofAgeSeconds?: number;
+  readonly verificationModes?: readonly VerificationMode[];
+}
+
+/**
+ * The caller identity to which the human result is restricted. For an agent,
+ * value should be a public-key fingerprint, not an API key or private key.
+ */
+export interface HumanBinding {
+  readonly kind: "request" | "wallet" | "agent_key" | "session";
+  readonly value: string;
+}
+
+export interface ProtectedResource {
+  readonly method: string;
+  readonly uri: string;
+  readonly audience: string;
+  readonly requestDigest: string;
+}
+
+/** Server-to-client payload carried by HUMAN-REQUIRED. */
+export interface HumanRequirement {
+  readonly x424Version: X424Version;
+  readonly dependencyId: string;
+  readonly purpose: string;
+  readonly resource: ProtectedResource;
+  readonly nonce: string;
+  readonly binding: HumanBinding;
+  readonly createdAt: IsoTimestamp;
+  readonly expiresAt: IsoTimestamp;
+  /** Explicit alternatives. No provider is accepted unless named here. */
+  readonly accepts: readonly HumanMethodRequirement[];
+  /** Provider-native request material, keyed by providerId:methodId. */
+  readonly providerRequests?: Readonly<Record<string, unknown>>;
+}
+
+/** Client-to-verifier provider submission. It is never put in an HTTP header. */
+export interface HumanProofSubmission {
+  readonly x424Version: X424Version;
+  readonly dependencyId: string;
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly binding: HumanBinding;
+  /** Kept opaque by the core and passed only to the selected adapter. */
+  readonly nativeProof: unknown;
+}
+
+export interface ProviderVerifiedHuman {
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly descriptorVersion: string;
+  readonly assuranceLevel?: string;
+  readonly providerSubject: string;
+  readonly uniquenessScope: UniquenessScope;
+  readonly verificationMode: VerificationMode;
+  readonly proofDigest: string;
+  readonly verifiedAt: IsoTimestamp;
+  readonly expiresAt?: IsoTimestamp;
+  readonly stateReferences?: readonly string[];
+}
+
+/**
+ * Minimal provider-neutral result. It contains a pairwise identifier, never a
+ * provider nullifier or globally stable subject.
+ */
+export interface HumanResult {
+  readonly x424Version: X424Version;
+  readonly resultId: string;
+  readonly dependencyId: string;
+  readonly satisfied: true;
+  readonly purpose: string;
+  readonly audience: string;
+  readonly requestDigest: string;
+  readonly binding: HumanBinding;
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly descriptorVersion: string;
+  readonly assuranceLevel?: string;
+  readonly pairwiseHumanId: string;
+  readonly uniquenessScope: UniquenessScope;
+  readonly verificationMode: VerificationMode;
+  readonly proofDigest: string;
+  readonly claim: string;
+  readonly nonClaims: readonly string[];
+  readonly verifiedAt: IsoTimestamp;
+  readonly issuedAt: IsoTimestamp;
+  readonly expiresAt: IsoTimestamp;
+  readonly stateReferences?: readonly string[];
+}
+
+export type HumanFailureCode =
+  | "ASSURANCE_NOT_ACCEPTED"
+  | "AUDIENCE_MISMATCH"
+  | "BINDING_MISMATCH"
+  | "CLAIM_MISMATCH"
+  | "DEPENDENCY_MISMATCH"
+  | "DESCRIPTOR_VERSION_MISMATCH"
+  | "EXPIRED"
+  | "FUTURE_TIMESTAMP"
+  | "METHOD_DISABLED"
+  | "METHOD_NOT_ACCEPTED"
+  | "METHOD_UNKNOWN"
+  | "PROOF_STALE"
+  | "PURPOSE_MISMATCH"
+  | "REQUEST_DIGEST_MISMATCH"
+  | "SCOPE_NOT_ACCEPTED"
+  | "TIME_WINDOW_INVALID"
+  | "VERIFICATION_MODE_NOT_ACCEPTED";
+
+export interface HumanFailure {
+  readonly code: HumanFailureCode;
+  readonly detail: string;
+}
+
+export interface HumanEvaluation {
+  readonly satisfied: boolean;
+  readonly failures: readonly HumanFailure[];
+}
+
+export interface HumanProviderAdapter {
+  readonly providerId: string;
+
+  methods(): readonly HumanMethodDescriptor[];
+
+  verify(input: {
+    readonly requirement: HumanRequirement;
+    readonly acceptedMethod: HumanMethodRequirement;
+    readonly proof: HumanProofSubmission;
+  }): Promise<ProviderVerifiedHuman>;
+}
+
+export interface NonceStore {
+  /** Atomically consume once. Returns false for unknown, expired, or used IDs. */
+  consume(dependencyId: string, nonce: string, now?: Date): Promise<boolean>;
+  put(
+    dependencyId: string,
+    nonce: string,
+    expiresAt: IsoTimestamp,
+  ): Promise<void>;
+}
+
+export interface ResultReplayStore {
+  /** Atomically marks a result ID used. False means it was already consumed. */
+  consume(
+    resultId: string,
+    expiresAt: IsoTimestamp,
+    now?: Date,
+  ): Promise<boolean>;
+}
+
+export interface X424Problem {
+  readonly type: "https://x424.org/problems/human-required";
+  readonly title: "Unique human required";
+  readonly status: 424;
+  readonly detail: string;
+  readonly dependencyId: string;
+}

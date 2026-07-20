@@ -1,0 +1,397 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "x424 Unique-Human Dependency API",
+    "version": "0.1.0",
+    "description": "Reference API for issuing and satisfying HTTP-native unique-human dependencies. A successful result is evidence for one bound dependency, not general identity or application authorization."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same-origin verifier deployment"
+    }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/v1/requirements": {
+      "post": {
+        "operationId": "createHumanRequirement",
+        "summary": "Create a short-lived unique-human dependency",
+        "description": "The trusted verifier adds provider-native signed request material. Deployments must authenticate and authorize this endpoint.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateRequirement" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dependency created. HUMAN-REQUIRED carries the base64url requirement.",
+            "headers": {
+              "HUMAN-REQUIRED": {
+                "required": true,
+                "schema": { "type": "string", "maxLength": 65536 }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["requirement"],
+                  "properties": {
+                    "requirement": {
+                      "$ref": "#/components/schemas/HumanRequirement"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "503": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requirements/{dependencyId}/verify": {
+      "post": {
+        "operationId": "verifyHumanProof",
+        "summary": "Verify the selected provider proof and satisfy a dependency",
+        "description": "Provider-native proof is handled inside the selected adapter. The response omits provider nullifiers and raw proofs.",
+        "parameters": [
+          {
+            "name": "dependencyId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 200 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/HumanProofSubmission" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Human dependency satisfied. HUMAN-RESULT is an x424-result+jws token.",
+            "headers": {
+              "HUMAN-RESULT": {
+                "required": true,
+                "schema": { "type": "string", "maxLength": 65536 }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["result", "token"],
+                  "properties": {
+                    "result": { "$ref": "#/components/schemas/HumanResult" },
+                    "token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Read reference verifier health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["status", "protocol", "version"],
+                  "properties": {
+                    "status": { "const": "ok" },
+                    "protocol": { "const": "x424" },
+                    "version": { "const": "0.1" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Deployment-issued caller authentication. This is separate from HUMAN-PROOF."
+      }
+    },
+    "responses": {
+      "Problem": {
+        "description": "RFC 9457-style problem response",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/Problem" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Binding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "value"],
+        "properties": {
+          "kind": { "enum": ["request", "wallet", "agent_key", "session"] },
+          "value": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
+      },
+      "HumanMethodRequirement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerId",
+          "methodId",
+          "descriptorVersion",
+          "acceptedScopeKinds"
+        ],
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "methodId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "descriptorVersion": { "type": "string" },
+          "assuranceLevel": { "type": "string" },
+          "acceptedScopeKinds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "enum": ["global", "relying_party", "action", "session"]
+            }
+          },
+          "maximumProofAgeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "verificationModes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": { "enum": ["backend", "offchain", "onchain", "hybrid"] }
+          }
+        }
+      },
+      "CreateRequirement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "purpose",
+          "method",
+          "uri",
+          "audience",
+          "binding",
+          "accepts"
+        ],
+        "properties": {
+          "purpose": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "method": { "type": "string", "minLength": 1, "maxLength": 20 },
+          "uri": { "type": "string", "format": "uri", "maxLength": 2048 },
+          "audience": { "type": "string", "format": "uri", "maxLength": 2048 },
+          "body": {},
+          "binding": { "$ref": "#/components/schemas/Binding" },
+          "accepts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": { "$ref": "#/components/schemas/HumanMethodRequirement" }
+          },
+          "ttlSeconds": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 900,
+            "default": 300
+          }
+        }
+      },
+      "HumanRequirement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "x424Version",
+          "dependencyId",
+          "purpose",
+          "resource",
+          "nonce",
+          "binding",
+          "createdAt",
+          "expiresAt",
+          "accepts"
+        ],
+        "properties": {
+          "x424Version": { "const": "0.1" },
+          "dependencyId": { "type": "string" },
+          "purpose": { "type": "string" },
+          "resource": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "uri", "audience", "requestDigest"],
+            "properties": {
+              "method": { "type": "string" },
+              "uri": { "type": "string", "format": "uri" },
+              "audience": { "type": "string", "format": "uri" },
+              "requestDigest": { "type": "string", "pattern": "^sha256:" }
+            }
+          },
+          "nonce": { "type": "string" },
+          "binding": { "$ref": "#/components/schemas/Binding" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "accepts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": { "$ref": "#/components/schemas/HumanMethodRequirement" }
+          },
+          "providerRequests": {
+            "type": "object",
+            "propertyNames": { "maxLength": 201 },
+            "additionalProperties": true
+          }
+        }
+      },
+      "HumanProofSubmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "x424Version",
+          "dependencyId",
+          "providerId",
+          "methodId",
+          "binding",
+          "nativeProof"
+        ],
+        "properties": {
+          "x424Version": { "const": "0.1" },
+          "dependencyId": { "type": "string" },
+          "providerId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "methodId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "binding": { "$ref": "#/components/schemas/Binding" },
+          "nativeProof": {
+            "description": "Opaque provider-native proof; never log this field."
+          }
+        }
+      },
+      "HumanResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "x424Version",
+          "resultId",
+          "dependencyId",
+          "satisfied",
+          "purpose",
+          "audience",
+          "requestDigest",
+          "binding",
+          "providerId",
+          "methodId",
+          "descriptorVersion",
+          "pairwiseHumanId",
+          "uniquenessScope",
+          "verificationMode",
+          "proofDigest",
+          "claim",
+          "nonClaims",
+          "verifiedAt",
+          "issuedAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "x424Version": { "const": "0.1" },
+          "resultId": { "type": "string" },
+          "dependencyId": { "type": "string" },
+          "satisfied": { "const": true },
+          "purpose": { "type": "string" },
+          "audience": { "type": "string", "format": "uri" },
+          "requestDigest": { "type": "string", "pattern": "^sha256:" },
+          "binding": { "$ref": "#/components/schemas/Binding" },
+          "providerId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "methodId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+          },
+          "descriptorVersion": { "type": "string" },
+          "assuranceLevel": { "type": "string" },
+          "pairwiseHumanId": { "type": "string", "pattern": "^x424_human_" },
+          "uniquenessScope": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "id"],
+            "properties": {
+              "kind": {
+                "enum": ["global", "relying_party", "action", "session"]
+              },
+              "id": { "type": "string" }
+            }
+          },
+          "verificationMode": {
+            "enum": ["backend", "offchain", "onchain", "hybrid"]
+          },
+          "proofDigest": { "type": "string", "pattern": "^sha256:" },
+          "claim": { "type": "string" },
+          "nonClaims": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "verifiedAt": { "type": "string", "format": "date-time" },
+          "issuedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "stateReferences": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "title", "status", "detail"],
+        "properties": {
+          "type": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" }
+        }
+      }
+    }
+  }
+}

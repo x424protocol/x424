@@ -1,0 +1,42 @@
+<evaluation>
+  <qa_pair>
+    <question>Read the fixed x424 conformance fixture, inspect its dependency, and identify the sole accepted provider, method, and descriptor version. Return the exact provider:method@version string.</question>
+    <answer>example:unique-human@1</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the fixed conformance fixture and inspect its dependency. Which caller-binding kind prevents the proof from being reused by a different machine actor? Return the enum value only.</question>
+    <answer>agent_key</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read and inspect the fixed dependency, then determine the HTTP method of the exact protected request. Return the uppercase method only.</question>
+    <answer>POST</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Use the fixed fixture and the requirement-inspection tool to determine the relying-party audience to which any successful result must be restricted. Return the URL only.</question>
+    <answer>https://api.example.test</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the conformance fixture and evaluate its valid result at the fixture's evaluation time. Return True if every exact provider, method, scope, mode, audience, request, binding, freshness, and expiry check passes; otherwise False.</question>
+    <answer>True</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the conformance fixture and evaluate the provider-substitution result at the fixture's evaluation time. Return the first failure code that proves another unique-human provider is not silently equivalent.</question>
+    <answer>METHOD_NOT_ACCEPTED</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the conformance fixture and evaluate the request-substitution result at the fixture's evaluation time. Return the failure code that binds humanity to the exact HTTP request.</question>
+    <answer>REQUEST_DIGEST_MISMATCH</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the fixed valid result but evaluate it at the fixture's expired evaluation time. Return the failure code caused by the short-lived result no longer being usable.</question>
+    <answer>EXPIRED</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the x424 protocol-profile resource and identify the HTTP status code used when a unique-human dependency is unsatisfied. Return the integer only.</question>
+    <answer>424</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the x424 protocol profile and fixed conformance requirement. Does satisfying this dependency itself grant application authorization? Return True or False.</question>
+    <answer>False</answer>
+  </qa_pair>
+</evaluation>

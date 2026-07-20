@@ -1,0 +1,7 @@
+dist/
+node_modules/
+pnpm-lock.yaml
+site/.vinext/
+site/.wrangler/
+site/dist/
+site/node_modules/

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>x424 dependency console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="eyebrow">x424 / 0.1</span>
+        <h1>Unique-human dependency console</h1>
+        <p>
+          Build and inspect one HTTP dependency. Provider proof stays between
+          this browser and the verifier; the public result contains only a
+          pairwise ID.
+        </p>
+      </header>
+
+      <section aria-labelledby="create-heading">
+        <div class="section-heading">
+          <span>01</span>
+          <h2 id="create-heading">Create dependency</h2>
+        </div>
+        <form id="requirement-form">
+          <label
+            >Verifier URL
+            <input
+              name="verifier"
+              type="url"
+              value="http://127.0.0.1:4241"
+              required
+          /></label>
+          <label
+            >Purpose <input name="purpose" value="publish-record" required
+          /></label>
+          <label
+            >Protected URI
+            <input
+              name="uri"
+              type="url"
+              value="https://api.example.test/records"
+              required
+          /></label>
+          <label
+            >Audience
+            <input
+              name="audience"
+              type="url"
+              value="https://api.example.test"
+              required
+          /></label>
+          <label
+            >Agent public-key fingerprint
+            <input name="binding" value="sha256:agent-public-key" required
+          /></label>
+          <label
+            >Provider ID
+            <input name="providerId" value="world" required />
+          </label>
+          <label
+            >Method ID
+            <input name="methodId" value="world-id-4-orb" required />
+          </label>
+          <label
+            >Descriptor version
+            <input name="descriptorVersion" value="1" required />
+          </label>
+          <label
+            >Assurance label
+            <input name="assuranceLevel" value="orb" />
+          </label>
+          <label
+            >Uniqueness scope
+            <select name="scopeKind">
+              <option value="relying_party">relying_party</option>
+              <option value="action" selected>action</option>
+              <option value="global">global</option>
+              <option value="session">session</option>
+            </select>
+          </label>
+          <label
+            >Verification mode
+            <select name="verificationMode">
+              <option value="backend" selected>backend</option>
+              <option value="offchain">offchain</option>
+              <option value="onchain">onchain</option>
+              <option value="hybrid">hybrid</option>
+            </select>
+          </label>
+          <button type="submit">Issue HUMAN-REQUIRED</button>
+        </form>
+        <pre id="requirement-output" aria-live="polite">
+Waiting for a verifier.</pre>
+      </section>
+
+      <section aria-labelledby="verify-heading">
+        <div class="section-heading">
+          <span>02</span>
+          <h2 id="verify-heading">Submit provider proof</h2>
+        </div>
+        <p class="warning">
+          Paste only into a verifier you trust. Production clients should obtain
+          this value directly from the selected provider and must never log it.
+        </p>
+        <form id="proof-form">
+          <label
+            >Provider-native result
+            <textarea
+              name="nativeProof"
+              rows="10"
+              placeholder='{"provider_specific":"opaque proof"}'
+              required
+            ></textarea>
+          </label>
+          <button type="submit">Verify and issue HUMAN-RESULT</button>
+        </form>
+        <pre id="result-output" aria-live="polite">No result yet.</pre>
+      </section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

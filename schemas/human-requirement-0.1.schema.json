@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://x424.org/schemas/human-requirement-0.1.schema.json",
+  "title": "x424 HumanRequirement 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "x424Version",
+    "dependencyId",
+    "purpose",
+    "resource",
+    "nonce",
+    "binding",
+    "createdAt",
+    "expiresAt",
+    "accepts"
+  ],
+  "properties": {
+    "x424Version": { "const": "0.1" },
+    "dependencyId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "purpose": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "resource": { "$ref": "#/$defs/resource" },
+    "nonce": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "binding": { "$ref": "#/$defs/binding" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "accepts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/method" }
+    },
+    "providerRequests": {
+      "type": "object",
+      "propertyNames": { "maxLength": 201 },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "enum": ["request", "wallet", "agent_key", "session"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "uri", "audience", "requestDigest"],
+      "properties": {
+        "method": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "uri": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "audience": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "requestDigest": {
+          "type": "string",
+          "pattern": "^sha256:",
+          "maxLength": 200
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "methodId",
+        "descriptorVersion",
+        "acceptedScopeKinds"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+        },
+        "methodId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+        },
+        "descriptorVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "assuranceLevel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "acceptedScopeKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["global", "relying_party", "action", "session"] }
+        },
+        "maximumProofAgeSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "verificationModes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["backend", "offchain", "onchain", "hybrid"] }
+        }
+      }
+    }
+  }
+}

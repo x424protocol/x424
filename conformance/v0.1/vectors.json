@@ -1,0 +1,153 @@
+{
+  "x424Version": "0.1",
+  "evaluationTime": "2026-07-19T12:00:00.000Z",
+  "expiredEvaluationTime": "2026-07-19T12:06:00.000Z",
+  "methodDescriptor": {
+    "providerId": "example",
+    "methodId": "unique-human",
+    "version": "1",
+    "status": "enabled",
+    "claim": "The example verifier accepted one unique human in the declared relying-party scope.",
+    "nonClaims": [
+      "Legal identity",
+      "Authorization for the protected action",
+      "Equivalence to another provider method"
+    ],
+    "assuranceLevels": ["example"],
+    "nativeScopeKinds": ["relying_party"],
+    "verificationModes": ["backend"],
+    "pairwisePseudonym": true,
+    "replaySemantics": "The example proof and x424 dependency are single-use.",
+    "recoverySemantics": "Recovery behavior is defined by the example provider, not x424.",
+    "privacy": "Provider subjects remain inside the verifier and are represented pairwise."
+  },
+  "requirement": {
+    "x424Version": "0.1",
+    "dependencyId": "x424_dep_fixture",
+    "purpose": "publish-record",
+    "resource": {
+      "method": "POST",
+      "uri": "https://api.example.test/records",
+      "audience": "https://api.example.test",
+      "requestDigest": "sha256:DwB08Ut4icozFuBty9LAcdXfB-riM_JDH0Lf_v1LFYo"
+    },
+    "nonce": "fixture-nonce",
+    "binding": {
+      "kind": "agent_key",
+      "value": "sha256:fixture-agent-key"
+    },
+    "createdAt": "2026-07-19T12:00:00.000Z",
+    "expiresAt": "2026-07-19T12:05:00.000Z",
+    "accepts": [
+      {
+        "providerId": "example",
+        "methodId": "unique-human",
+        "descriptorVersion": "1",
+        "assuranceLevel": "example",
+        "acceptedScopeKinds": ["relying_party"],
+        "maximumProofAgeSeconds": 300,
+        "verificationModes": ["backend"]
+      }
+    ]
+  },
+  "result": {
+    "x424Version": "0.1",
+    "resultId": "x424_result_fixture",
+    "dependencyId": "x424_dep_fixture",
+    "satisfied": true,
+    "purpose": "publish-record",
+    "audience": "https://api.example.test",
+    "requestDigest": "sha256:DwB08Ut4icozFuBty9LAcdXfB-riM_JDH0Lf_v1LFYo",
+    "binding": {
+      "kind": "agent_key",
+      "value": "sha256:fixture-agent-key"
+    },
+    "providerId": "example",
+    "methodId": "unique-human",
+    "descriptorVersion": "1",
+    "assuranceLevel": "example",
+    "pairwiseHumanId": "x424_human_fixture",
+    "uniquenessScope": {
+      "kind": "relying_party",
+      "id": "example:rp_fixture"
+    },
+    "verificationMode": "backend",
+    "proofDigest": "sha256:fixture-proof",
+    "claim": "The example verifier accepted one unique human in the declared relying-party scope.",
+    "nonClaims": [
+      "Legal identity",
+      "Authorization for the protected action",
+      "Equivalence to another provider method"
+    ],
+    "verifiedAt": "2026-07-19T11:59:30.000Z",
+    "issuedAt": "2026-07-19T12:00:00.000Z",
+    "expiresAt": "2026-07-19T12:05:00.000Z"
+  },
+  "humanRequired": "eyJhY2NlcHRzIjpbeyJhY2NlcHRlZFNjb3BlS2luZHMiOlsicmVseWluZ19wYXJ0eSJdLCJhc3N1cmFuY2VMZXZlbCI6ImV4YW1wbGUiLCJkZXNjcmlwdG9yVmVyc2lvbiI6IjEiLCJtYXhpbXVtUHJvb2ZBZ2VTZWNvbmRzIjozMDAsIm1ldGhvZElkIjoidW5pcXVlLWh1bWFuIiwicHJvdmlkZXJJZCI6ImV4YW1wbGUiLCJ2ZXJpZmljYXRpb25Nb2RlcyI6WyJiYWNrZW5kIl19XSwiYmluZGluZyI6eyJraW5kIjoiYWdlbnRfa2V5IiwidmFsdWUiOiJzaGEyNTY6Zml4dHVyZS1hZ2VudC1rZXkifSwiY3JlYXRlZEF0IjoiMjAyNi0wNy0xOVQxMjowMDowMC4wMDBaIiwiZGVwZW5kZW5jeUlkIjoieDQyNF9kZXBfZml4dHVyZSIsImV4cGlyZXNBdCI6IjIwMjYtMDctMTlUMTI6MDU6MDAuMDAwWiIsIm5vbmNlIjoiZml4dHVyZS1ub25jZSIsInB1cnBvc2UiOiJwdWJsaXNoLXJlY29yZCIsInJlc291cmNlIjp7ImF1ZGllbmNlIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS50ZXN0IiwibWV0aG9kIjoiUE9TVCIsInJlcXVlc3REaWdlc3QiOiJzaGEyNTY6RHdCMDhVdDRpY296RnVCdHk5TEFjZFhmQi1yaU1fSkRIMExmX3YxTEZZbyIsInVyaSI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdC9yZWNvcmRzIn0sIng0MjRWZXJzaW9uIjoiMC4xIn0",
+  "humanResult": "eyJhc3N1cmFuY2VMZXZlbCI6ImV4YW1wbGUiLCJhdWRpZW5jZSI6Imh0dHBzOi8vYXBpLmV4YW1wbGUudGVzdCIsImJpbmRpbmciOnsia2luZCI6ImFnZW50X2tleSIsInZhbHVlIjoic2hhMjU2OmZpeHR1cmUtYWdlbnQta2V5In0sImNsYWltIjoiVGhlIGV4YW1wbGUgdmVyaWZpZXIgYWNjZXB0ZWQgb25lIHVuaXF1ZSBodW1hbiBpbiB0aGUgZGVjbGFyZWQgcmVseWluZy1wYXJ0eSBzY29wZS4iLCJkZXBlbmRlbmN5SWQiOiJ4NDI0X2RlcF9maXh0dXJlIiwiZGVzY3JpcHRvclZlcnNpb24iOiIxIiwiZXhwaXJlc0F0IjoiMjAyNi0wNy0xOVQxMjowNTowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTA3LTE5VDEyOjAwOjAwLjAwMFoiLCJtZXRob2RJZCI6InVuaXF1ZS1odW1hbiIsIm5vbkNsYWltcyI6WyJMZWdhbCBpZGVudGl0eSIsIkF1dGhvcml6YXRpb24gZm9yIHRoZSBwcm90ZWN0ZWQgYWN0aW9uIiwiRXF1aXZhbGVuY2UgdG8gYW5vdGhlciBwcm92aWRlciBtZXRob2QiXSwicGFpcndpc2VIdW1hbklkIjoieDQyNF9odW1hbl9maXh0dXJlIiwicHJvb2ZEaWdlc3QiOiJzaGEyNTY6Zml4dHVyZS1wcm9vZiIsInByb3ZpZGVySWQiOiJleGFtcGxlIiwicHVycG9zZSI6InB1Ymxpc2gtcmVjb3JkIiwicmVxdWVzdERpZ2VzdCI6InNoYTI1NjpEd0IwOFV0NGljb3pGdUJ0eTlMQWNkWGZCLXJpTV9KREgwTGZfdjFMRllvIiwicmVzdWx0SWQiOiJ4NDI0X3Jlc3VsdF9maXh0dXJlIiwic2F0aXNmaWVkIjp0cnVlLCJ1bmlxdWVuZXNzU2NvcGUiOnsiaWQiOiJleGFtcGxlOnJwX2ZpeHR1cmUiLCJraW5kIjoicmVseWluZ19wYXJ0eSJ9LCJ2ZXJpZmljYXRpb25Nb2RlIjoiYmFja2VuZCIsInZlcmlmaWVkQXQiOiIyMDI2LTA3LTE5VDExOjU5OjMwLjAwMFoiLCJ4NDI0VmVyc2lvbiI6IjAuMSJ9",
+  "negativeResultMutations": [
+    {
+      "name": "provider-substitution",
+      "patch": {
+        "providerId": "other-provider",
+        "methodId": "unique-human"
+      },
+      "expectedFailureCodes": ["METHOD_NOT_ACCEPTED", "METHOD_UNKNOWN"]
+    },
+    {
+      "name": "request-substitution",
+      "patch": { "requestDigest": "sha256:wrong-request" },
+      "expectedFailureCodes": ["REQUEST_DIGEST_MISMATCH"]
+    },
+    {
+      "name": "binding-substitution",
+      "patch": {
+        "binding": {
+          "kind": "agent_key",
+          "value": "sha256:other-agent-key"
+        }
+      },
+      "expectedFailureCodes": ["BINDING_MISMATCH"]
+    },
+    {
+      "name": "purpose-substitution",
+      "patch": { "purpose": "another-purpose" },
+      "expectedFailureCodes": ["PURPOSE_MISMATCH"]
+    },
+    {
+      "name": "descriptor-version-substitution",
+      "patch": { "descriptorVersion": "2" },
+      "expectedFailureCodes": ["DESCRIPTOR_VERSION_MISMATCH"]
+    },
+    {
+      "name": "assurance-substitution",
+      "patch": { "assuranceLevel": "unaccepted" },
+      "expectedFailureCodes": ["ASSURANCE_NOT_ACCEPTED"]
+    },
+    {
+      "name": "scope-substitution",
+      "patch": {
+        "uniquenessScope": {
+          "kind": "global",
+          "id": "example:global"
+        }
+      },
+      "expectedFailureCodes": ["SCOPE_NOT_ACCEPTED"]
+    },
+    {
+      "name": "mode-substitution",
+      "patch": { "verificationMode": "offchain" },
+      "expectedFailureCodes": ["VERIFICATION_MODE_NOT_ACCEPTED"]
+    },
+    {
+      "name": "claim-substitution",
+      "patch": { "claim": "A stronger claim that was never accepted." },
+      "expectedFailureCodes": ["CLAIM_MISMATCH"]
+    },
+    {
+      "name": "extended-lifetime",
+      "patch": { "expiresAt": "2026-07-19T12:10:00.000Z" },
+      "expectedFailureCodes": ["TIME_WINDOW_INVALID"]
+    }
+  ]
+}

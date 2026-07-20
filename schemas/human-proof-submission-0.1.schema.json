@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://x424.org/schemas/human-proof-submission-0.1.schema.json",
+  "title": "x424 HumanProofSubmission 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "x424Version",
+    "dependencyId",
+    "providerId",
+    "methodId",
+    "binding",
+    "nativeProof"
+  ],
+  "properties": {
+    "x424Version": { "const": "0.1" },
+    "dependencyId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "providerId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+    },
+    "methodId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "enum": ["request", "wallet", "agent_key", "session"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    },
+    "nativeProof": true
+  }
+}
