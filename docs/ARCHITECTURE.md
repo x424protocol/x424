@@ -42,6 +42,7 @@ sequenceDiagram
   V->>V: Load + atomically consume dependency
   V->>P: Verify native proof
   P-->>V: Exact accepted provider result
+  V->>V: Atomically retain provider-subject digest
   V->>V: Derive pairwise human + sign result
   V-->>C: HUMAN-RESULT token
   C->>R: Retry + HUMAN-PROOF token
@@ -136,8 +137,9 @@ that system but are never bearer mandates.
 Minimum verifier state:
 
 - pending dependency ID, nonce, expiry, request digest, binding, and policy;
-- provider-private subject/nullifier only within the derivation/uniqueness
-  boundary required by that method;
+- when required by the installed method, an HMAC digest of the provider
+  subject, method, and uniqueness scope for atomic provider-replay enforcement;
+  raw provider subjects remain ephemeral;
 - pairwise-secret key version;
 - result signing-key metadata; and
 - replay state through result expiry.
@@ -155,9 +157,10 @@ systems, analytics, queues, and public chain state.
 ## Reference repository boundary
 
 The repository ships a deterministic kernel, provider-adapter SDK, fixed
-conformance artifacts, JSON Schemas, integration surfaces, and Redis 6.2+
-atomic state—not a hosted authority. The Express router defaults to
-process-local state for examples and accepts a shared `RequirementStore` for
+conformance artifacts, JSON Schemas, integration surfaces, a reusable World
+verifier profile, and Redis 6.2+ atomic state—not a hosted authority. The
+Express router defaults to process-local requirement state for examples and
+accepts shared requirement, dependency, provider-replay, and result stores for
 real deployments. Production deployments still add authenticated issuance,
 managed signing keys, proof-safe metrics, rate limits, and provider-specific
 operations.

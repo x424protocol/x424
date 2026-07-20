@@ -8,6 +8,7 @@ import {
   generatePairwiseSecret,
   generateResultKeyPair,
   InMemoryNonceStore,
+  InMemoryProviderReplayStore,
   inspectHumanProviderAdapter,
 } from "../src/core.js";
 
@@ -89,6 +90,7 @@ describe("provider adapter SDK", () => {
           catalog: defineMethodCatalog([method]),
           adapters: [adapter, adapter],
           nonceStore: new InMemoryNonceStore(),
+          providerReplayStore: new InMemoryProviderReplayStore(),
           pairwiseSecret: generatePairwiseSecret(),
           resultSigner: generateResultKeyPair().signer,
         }),
@@ -102,6 +104,7 @@ describe("provider adapter SDK", () => {
           catalog: defineMethodCatalog([method]),
           adapters: [],
           nonceStore: new InMemoryNonceStore(),
+          providerReplayStore: new InMemoryProviderReplayStore(),
           pairwiseSecret: generatePairwiseSecret(),
           resultSigner: generateResultKeyPair().signer,
         }),

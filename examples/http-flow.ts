@@ -1,7 +1,7 @@
 import {
   createHumanRequirement,
-  createWorldIdMethodRequirement,
-  createWorldIdProviderRequest,
+  createWorldIdMethodRequirements,
+  createWorldIdProviderRequests,
   decodeHumanRequirement,
   humanRequiredResponse,
 } from "../src/index.js";
@@ -10,13 +10,14 @@ const binding = {
   kind: "agent_key",
   value: "sha256:agent-public-key",
 } as const;
-const providerRequest = createWorldIdProviderRequest({
+const providerRequests = createWorldIdProviderRequests({
   appId: "app_example",
   rpId: "rp_example",
   action: "publish-record",
   environment: "staging",
   signingKeyHex: `0x${"ab".repeat(32)}`,
   binding,
+  allowLegacyProofs: true,
 });
 
 const requirement = createHumanRequirement({
@@ -26,10 +27,8 @@ const requirement = createHumanRequirement({
   audience: "https://api.example.test",
   body: { title: "A human-gated record" },
   binding,
-  accepts: [createWorldIdMethodRequirement()],
-  providerRequests: {
-    "world:proof-of-human": providerRequest,
-  },
+  accepts: createWorldIdMethodRequirements({ allowLegacyProofs: true }),
+  providerRequests,
 });
 
 const response = humanRequiredResponse(requirement);

@@ -1,4 +1,10 @@
-import type { IsoTimestamp, NonceStore, ResultReplayStore } from "./types.js";
+import type {
+  IsoTimestamp,
+  NonceStore,
+  ProviderReplayEntry,
+  ProviderReplayStore,
+  ResultReplayStore,
+} from "./types.js";
 
 interface NonceEntry {
   readonly nonce: string;
@@ -66,6 +72,32 @@ export class InMemoryResultReplayStore implements ResultReplayStore {
     }
     if (this.#used.has(resultId)) return false;
     this.#used.set(resultId, expiresAtMs);
+    return true;
+  }
+}
+
+/** Development/reference provider replay store. Production needs atomic state. */
+export class InMemoryProviderReplayStore implements ProviderReplayStore {
+  readonly #used = new Set<string>();
+
+  async consume(entry: ProviderReplayEntry): Promise<boolean> {
+    const key = [
+      entry.providerId,
+      entry.methodId,
+      entry.uniquenessScope.kind,
+      entry.uniquenessScope.id,
+      entry.subjectDigest,
+    ].join("\u0000");
+    if (
+      !entry.providerId ||
+      !entry.methodId ||
+      !entry.uniquenessScope.id ||
+      !entry.subjectDigest ||
+      this.#used.has(key)
+    ) {
+      return false;
+    }
+    this.#used.add(key);
     return true;
   }
 }

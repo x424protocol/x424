@@ -15,7 +15,7 @@ export interface WorldIdProofRequest {
   collect(options?: WaitOptions): Promise<IDKitResult>;
 }
 
-/** Build the current IDKit Proof of Human request from x424 provider material. */
+/** Build one IDKit Proof of Human ceremony from x424 provider material. */
 export async function createWorldIdProofRequest(
   providerRequest: WorldIdProviderRequest,
 ): Promise<WorldIdProofRequest> {
@@ -23,9 +23,9 @@ export async function createWorldIdProofRequest(
     app_id: providerRequest.appId as `app_${string}`,
     action: providerRequest.action,
     rp_context: providerRequest.rpContext,
-    // v3 and v4 credentials have different nullifiers. A single x424 method
-    // must never accept both without a cross-version deduplication contract.
-    allow_legacy_proofs: false,
+    // IDKit may return v4 Proof of Human or its v3 Orb fallback. The x424
+    // resolver labels those as separate immutable methods after collection.
+    allow_legacy_proofs: providerRequest.allowLegacyProofs,
     environment: providerRequest.environment,
   }).preset(proofOfHuman({ signal: providerRequest.signal }));
 

@@ -91,11 +91,11 @@ standard. The repository now includes:
 - canonical requirement/result codecs and request digests;
 - exact audience, purpose, time, request, and caller binding;
 - Ed25519 signed results and pairwise human identifiers;
-- atomic-store interfaces plus Redis-backed requirement, nonce, and replay
-  state;
+- atomic-store interfaces plus Redis-backed requirement, dependency,
+  provider-subject, and result replay state;
 - a provider-adapter SDK and fixed negative conformance vectors;
-- a strict World Proof of Human profile with signed RP requests and built-in
-  signal binding;
+- a reusable World verifier profile with signed RP requests, built-in signal
+  binding, and an explicit legacy Orb fallback method;
 - a generic HTTP verifier resolver and one-challenge/one-retry client;
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
@@ -136,8 +136,8 @@ import { createHttpHumanDependencyResolver, fetchWithX424 } from "x424/client";
 import { defineHumanProviderAdapter } from "x424/adapters";
 import {
   WorldIdAdapter,
-  createWorldIdMethodRequirement,
-  createWorldIdProviderRequest,
+  createWorldIdMethodRequirements,
+  createWorldIdVerifierProfile,
 } from "x424/providers/world-id";
 import {
   createWorldIdIdKitProofResolver,
@@ -150,38 +150,40 @@ import { createX424McpServer } from "x424/mcp";
 
 ## World Proof of Human profile
 
-The World profile uses the current `proofOfHuman` semantics. It generates the
-RP signature on the trusted backend, uses the x424 binding as the World signal,
+The World profile uses one `proofOfHuman` ceremony. It generates the RP
+signature on the trusted backend, uses the x424 binding as the World signal,
 forwards the IDKit result without reshaping it, and accepts only a matching
 World verification result.
 
-Create one exact accepted method and its signed client request:
+Create the reusable profile once:
 
 ```ts
-import {
-  WORLD_ID_METHOD_KEY,
-  createWorldIdMethodRequirement,
-  createWorldIdProviderRequest,
-} from "x424/providers/world-id";
+import { createWorldIdVerifierProfile } from "x424/providers/world-id";
 
-const binding = { kind: "agent_key", value: agentPublicKeyFingerprint };
-const accepts = [createWorldIdMethodRequirement()];
-const providerRequests = {
-  [WORLD_ID_METHOD_KEY]: createWorldIdProviderRequest({
-    appId: process.env.WORLD_APP_ID!,
-    rpId: process.env.WORLD_RP_ID!,
-    signingKeyHex: process.env.WORLD_RP_SIGNING_KEY!,
-    action: "publish-record",
-    environment: "production",
-    binding,
-  }),
-};
+const world = createWorldIdVerifierProfile({
+  appId: process.env.WORLD_APP_ID!,
+  rpId: process.env.WORLD_RP_ID!,
+  signingKeyHex: process.env.WORLD_RP_SIGNING_KEY!,
+  action: "publish-record",
+  environment: "production",
+  allowLegacyProofs: true,
+});
+
+// world.catalog and world.adapter configure X424Service.
+// world.accepts and world.providerRequests configure requirement issuance.
 ```
 
-The signing key never enters `providerRequests`. This profile accepts only the
-current v4 `proof_of_human` credential. Legacy credentials require a separately
-versioned method with cross-version deduplication; the reference adapter does
-not claim that capability.
+The signing key never enters `providerRequests`. With legacy enabled, IDKit may
+complete the same ceremony with either `world:proof-of-human@1` (v4) or
+`world:orb-legacy@1` (v3). The resolver labels the actual outcome before proof
+submission, and the signed x424 result preserves that exact method. A client
+cannot enable fallback unless the requirement, signed provider request, and
+verifier profile all allow it.
+
+The two methods deliberately produce different pairwise IDs and do not claim
+cross-version deduplication. Applications that accept both for one long-lived
+participation namespace must retain their existing cross-version policy. x424
+does not pretend that different World nullifiers identify the same person.
 
 World uniqueness is scoped to the RP and registered World action—not to the
 x424 dependency ID or signal. Reusing one World action therefore means one
@@ -191,7 +193,8 @@ request. Choose actions as real uniqueness domains.
 ## Shared verifier state
 
 The Express router accepts a shared `RequirementStore`. The Redis runtime
-provides requirement, nonce, and result stores through one configured client:
+provides requirement, dependency nonce, provider replay, and result stores
+through one configured client:
 
 ```ts
 import { createClient } from "redis";
@@ -202,7 +205,11 @@ await redis.connect();
 
 const state = new RedisX424Store({ client: redis });
 
-// X424Service({ nonceStore: state.nonces, ... })
+// X424Service({
+//   nonceStore: state.nonces,
+//   providerReplayStore: state.providers,
+//   ...
+// })
 // createX424HttpRouter({ requirementStore: state.requirements, ... })
 // verifyHumanProofHeader({ replayStore: state.results, ... })
 ```

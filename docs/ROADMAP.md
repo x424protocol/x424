@@ -29,7 +29,8 @@ Purpose: freeze a testable first contract and remove basic adopter glue.
 - [x] Normative HTTP requirement and result contract
 - [x] JSON Schemas, OpenAPI, and fixed positive/negative vectors
 - [x] Provider adapter SDK and fail-closed method catalog
-- [x] Strict World Proof of Human profile with built-in signal binding
+- [x] World Proof of Human profile with exact v4/legacy methods and signal binding
+- [x] Reusable World verifier profile and atomic provider-subject replay store
 - [x] Generic HTTP verifier resolver and one-retry client
 - [x] Injectable requirement storage and Redis atomic state implementation
 - [ ] Reproducible npm release with provenance and package smoke tests

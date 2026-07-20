@@ -64,6 +64,11 @@ client never chooses an unlisted provider or weakens the requirement.
 Provider profiles can supply proof resolvers, so application code handles the
 provider UI without rebuilding x424 request bodies or headers.
 
+For the World profile, enabling legacy fallback does not add another user step.
+One `proofOfHuman` ceremony may return v4 Proof of Human or legacy v3 Orb; the
+resolver submits the exact method that actually completed. The two outcomes
+remain separate trust branches and do not imply cross-version deduplication.
+
 The relying party may persist its own account or membership projection from the
 same verified event. That projection remains application authority and must not
 be embedded in the x424 result.
@@ -112,8 +117,8 @@ proofs stay independent: satisfying one never weakens or implies the other.
 The reference router is demonstrative. A production verifier requires:
 
 - authenticated requirement issuance;
-- distributed atomic requirement, nonce, and result-consumption stores (the
-  package includes a Redis implementation);
+- distributed atomic requirement, dependency nonce, provider-subject, and
+  result-consumption stores (the package includes a Redis implementation);
 - managed signing and pairwise-derivation keys;
 - strict provider origin, environment, method, and response validation;
 - rate limits and capacity controls;

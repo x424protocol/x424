@@ -231,12 +231,14 @@ supplied alongside its token is prohibited.
 
 ## 9. Replay and idempotency
 
-There are three separate replay controls:
+There are four separate replay controls:
 
-1. Provider replay: defined by the provider method (for example, a one-time
-   World uniqueness nullifier).
-2. Dependency replay: the verifier atomically consumes `(dependencyId, nonce)`.
-3. Result replay: a state-changing resource server atomically consumes
+1. Provider-native replay: defined by the provider method.
+2. Provider-subject replay: when the method requires relying-party retention,
+   the verifier atomically retains a private digest of
+   `(provider, method, scope, providerSubject)`.
+3. Dependency replay: the verifier atomically consumes `(dependencyId, nonce)`.
+4. Result replay: a state-changing resource server atomically consumes
    `resultId` until token expiry.
 
 x424 result consumption does not replace application idempotency. Mutations
@@ -250,10 +252,15 @@ This profile is non-normative for x424 core. It demonstrates how one concrete
 provider method preserves native claims and non-claims without adding provider
 fields to the wire protocol.
 
-Identifier: `world:proof-of-human@1`.
+Identifiers:
 
-Positive claim: World accepted its Proof of Human uniqueness method for the
-configured RP and action.
+- `world:proof-of-human@1` for World ID 4 Proof of Human; and
+- `world:orb-legacy@1` for the World ID 3 Orb fallback.
+
+The positive claim is method-specific. The v4 method states that World accepted
+Proof of Human for the configured RP and action. The legacy method states that
+World accepted a legacy World ID 3 Orb uniqueness proof for that RP/action.
+Neither method claims civil identity or equivalence to the other.
 
 Mandatory non-claims include civil identity, demographic attributes,
 continuous presence, agent/wallet ownership, broad authorization, and
@@ -263,14 +270,21 @@ Profile rules:
 
 - RP ID uses the current `rp_...` namespace.
 - Native signed request material and action are generated on the backend.
-- The x424 binding value is the World signal; the adapter checks its provider
-  hash before calling the remote verifier.
+- The x424 binding value is the World signal; both branches must contain its
+  exact provider hash before the adapter calls the remote verifier.
 - The exact IDKit result is forwarded to `POST /api/v4/verify/{rp_id}` without
   proof-field reshaping.
-- The profile accepts only the current v4 `proof_of_human` credential. It
-  rejects legacy credentials because v3 and v4 nullifiers cannot be treated as
-  one human without an explicit cross-version deduplication contract.
+- One IDKit `proofOfHuman` ceremony may resolve to v4 `proof_of_human` or, when
+  explicitly enabled, v3 `orb`. The client labels the actual outcome with its
+  exact x424 method before submission.
+- Legacy is enabled only when the requirement accepts `world:orb-legacy@1`, the
+  trusted provider request sets `allowLegacyProofs`, and the verifier profile
+  enables it. Native-proof/method substitution fails closed.
+- v3 and v4 nullifiers are stored and pairwise-derived under distinct method
+  namespaces. The profile makes no cross-version deduplication claim.
 - The provider nullifier remains private and is never returned.
+- The verifier atomically retains only an HMAC digest of the provider,
+  method, scope, and nullifier before issuing a result.
 - The method's uniqueness scope is `action` in profile 1.
 - The World action, not the x424 dependency ID or signal, defines the native
   one-human participation namespace. Reusing an action does not create fresh
