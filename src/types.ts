@@ -182,6 +182,17 @@ export interface NonceStore {
   ): Promise<void>;
 }
 
+/**
+ * Stores the server-issued requirement that a verifier and resource server
+ * later evaluate. Implementations must expire entries at `expiresAt` and must
+ * never accept a client-supplied replacement for a stored requirement.
+ */
+export interface RequirementStore {
+  put(requirement: HumanRequirement): Promise<void>;
+  get(dependencyId: string, now?: Date): Promise<HumanRequirement | undefined>;
+  delete(dependencyId: string): Promise<void>;
+}
+
 export interface ResultReplayStore {
   /** Atomically marks a result ID used. False means it was already consumed. */
   consume(

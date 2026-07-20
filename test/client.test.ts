@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   HUMAN_PROOF_HEADER,
   createHumanRequirement,
+  createHttpHumanDependencyResolver,
   fetchWithX424,
   humanRequiredResponse,
 } from "../src/core.js";
@@ -123,5 +124,66 @@ describe("x424 fetch client", () => {
       ),
     ).rejects.toThrow("another HTTP request");
     expect(resolveHumanDependency).not.toHaveBeenCalled();
+  });
+
+  it("submits provider proof through the standard verifier API", async () => {
+    const requests: Request[] = [];
+    const fetchImplementation = vi.fn(async (request: Request) => {
+      requests.push(request);
+      return new Response(JSON.stringify({ token: "signed-result-token" }), {
+        status: 200,
+        headers: { "human-result": "signed-result-token" },
+      });
+    });
+    const resolver = createHttpHumanDependencyResolver({
+      verifierUrl: "https://verifier.example.test/x424/",
+      resolveProviderProof: async () => ({
+        providerId: "example",
+        methodId: "unique-human",
+        descriptorVersion: "1",
+        nativeProof: { opaque: true },
+      }),
+      fetchImplementation: fetchImplementation as unknown as typeof fetch,
+      headers: { authorization: "Bearer verifier-token" },
+    });
+
+    await expect(
+      resolver({
+        requirement: requirement(),
+        response: new Response(null, { status: 424 }),
+      }),
+    ).resolves.toEqual({ humanProof: "signed-result-token" });
+    expect(requests[0]!.url).toContain("/x424/v1/requirements/x424_dep_");
+    expect(requests[0]!.headers.get("authorization")).toBe(
+      "Bearer verifier-token",
+    );
+    const submitted = (await requests[0]!.json()) as {
+      providerId: string;
+      binding: { value: string };
+    };
+    expect(submitted.providerId).toBe("example");
+    expect(submitted.binding.value).toBe("sha256:agent-key");
+  });
+
+  it("rejects a resolver for another descriptor version before submission", async () => {
+    const fetchImplementation = vi.fn();
+    const resolver = createHttpHumanDependencyResolver({
+      verifierUrl: "https://verifier.example.test/",
+      resolveProviderProof: async () => ({
+        providerId: "example",
+        methodId: "unique-human",
+        descriptorVersion: "2",
+        nativeProof: { opaque: true },
+      }),
+      fetchImplementation: fetchImplementation as unknown as typeof fetch,
+    });
+
+    await expect(
+      resolver({
+        requirement: requirement(),
+        response: new Response(null, { status: 424 }),
+      }),
+    ).rejects.toThrow("unaccepted human method");
+    expect(fetchImplementation).not.toHaveBeenCalled();
   });
 });

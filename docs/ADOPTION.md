@@ -4,6 +4,9 @@ x424 is a dependency protocol, not an account system. A relying party adopts
 x424 at its HTTP boundary while retaining its own authentication,
 authorization, identity lifecycle, and business rules.
 
+The division of responsibility and the measurable “off-the-shelf” bar are in
+[ADOPTER_CONTRACT.md](ADOPTER_CONTRACT.md).
+
 ## Integration contract
 
 A conforming relying party:
@@ -57,6 +60,10 @@ The reference `fetchWithX424` client performs exactly one challenge resolution
 and retry. Applications supply the trusted wallet/UI resolver; the protocol
 client never chooses an unlisted provider or weakens the requirement.
 
+`createHttpHumanDependencyResolver` owns the standard verifier submission.
+Provider profiles can supply proof resolvers, so application code handles the
+provider UI without rebuilding x424 request bodies or headers.
+
 The relying party may persist its own account or membership projection from the
 same verified event. That projection remains application authority and must not
 be embedded in the x424 result.
@@ -105,7 +112,8 @@ proofs stay independent: satisfying one never weakens or implies the other.
 The reference router is demonstrative. A production verifier requires:
 
 - authenticated requirement issuance;
-- distributed atomic nonce and result-consumption stores;
+- distributed atomic requirement, nonce, and result-consumption stores (the
+  package includes a Redis implementation);
 - managed signing and pairwise-derivation keys;
 - strict provider origin, environment, method, and response validation;
 - rate limits and capacity controls;

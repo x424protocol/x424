@@ -18,6 +18,11 @@ Protocol changes follow [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md). Every
 proposal must state compatibility and security impact; unresolved semantic
 ambiguity fails closed.
 
+Use the protocol-change or provider-profile issue form before proposing a new
+wire semantic or identity method. Adoption work must preserve the boundary in
+[`docs/ADOPTER_CONTRACT.md`](docs/ADOPTER_CONTRACT.md): adopter policy belongs
+to the adopter; reusable verification mechanics belong in x424.
+
 ## Provider adapters
 
 Every adapter proposal must include:

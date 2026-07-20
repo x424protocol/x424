@@ -7,12 +7,13 @@ import {
   encodeHumanRequirement,
 } from "../http.js";
 import { createHumanRequirement } from "../requirements.js";
+import { InMemoryRequirementStore } from "../requirement-store.js";
 import { parseHumanProofSubmission } from "../schemas.js";
 import type { X424Service } from "../service.js";
 import type {
   HumanBinding,
   HumanMethodRequirement,
-  HumanRequirement,
+  RequirementStore,
 } from "../types.js";
 
 const MethodSchema = z
@@ -73,7 +74,10 @@ export interface X424HttpRouterOptions {
     readonly purpose: string;
     readonly binding: HumanBinding;
     readonly accepts: readonly HumanMethodRequirement[];
+    readonly ttlSeconds: number;
   }) => Promise<Readonly<Record<string, unknown>>>;
+  /** Shared pending state. Omit only for local development and tests. */
+  readonly requirementStore?: RequirementStore;
   readonly maximumPendingRequirements?: number;
 }
 
@@ -120,8 +124,9 @@ function problem(
  */
 export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   const router = Router();
-  const pending = new Map<string, HumanRequirement>();
-  const maximumPending = options.maximumPendingRequirements ?? 10_000;
+  const requirementStore =
+    options.requirementStore ??
+    new InMemoryRequirementStore(options.maximumPendingRequirements ?? 10_000);
 
   router.post(
     "/v1/requirements",
@@ -135,20 +140,13 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
           "Request body is invalid",
         );
       }
-      if (pending.size >= maximumPending) {
-        return problem(
-          response,
-          503,
-          "CAPACITY_EXCEEDED",
-          "Requirement store is full",
-        );
-      }
       try {
         const accepts = exactMethods(parsed.data.accepts);
         const providerRequests = await options.providerRequests({
           purpose: parsed.data.purpose,
           binding: parsed.data.binding,
           accepts,
+          ttlSeconds: parsed.data.ttlSeconds,
         });
         const requirement = createHumanRequirement({
           purpose: parsed.data.purpose,
@@ -161,8 +159,13 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
           ttlSeconds: parsed.data.ttlSeconds,
           providerRequests,
         });
-        await options.service.register(requirement);
-        pending.set(requirement.dependencyId, requirement);
+        await requirementStore.put(requirement);
+        try {
+          await options.service.register(requirement);
+        } catch (error) {
+          await requirementStore.delete(requirement.dependencyId);
+          throw error;
+        }
         response.set(
           HUMAN_REQUIRED_HEADER,
           encodeHumanRequirement(requirement),
@@ -192,7 +195,7 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
           "Invalid dependency ID",
         );
       }
-      const requirement = pending.get(dependencyId);
+      const requirement = await requirementStore.get(dependencyId);
       if (!requirement) {
         return problem(
           response,
@@ -208,12 +211,12 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
       try {
         const proof = parseHumanProofSubmission(parsed.data);
         const satisfied = await options.service.satisfy({ requirement, proof });
-        pending.delete(requirement.dependencyId);
+        await requirementStore.delete(requirement.dependencyId);
         response.set(HUMAN_RESULT_HEADER, satisfied.token);
         response.set("cache-control", "no-store, private");
         return response.status(200).json(satisfied);
       } catch (error) {
-        pending.delete(requirement.dependencyId);
+        await requirementStore.delete(requirement.dependencyId);
         return problem(
           response,
           422,

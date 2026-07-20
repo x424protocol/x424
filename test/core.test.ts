@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  WORLD_ID_ORB_METHOD,
+  WORLD_ID_PROOF_OF_HUMAN_METHOD,
   X424Service,
+  createWorldIdMethodRequirement,
+  createWorldIdProviderRequest,
   createHumanRequirement,
   decodeHumanRequirement,
   defineMethodCatalog,
@@ -16,37 +18,34 @@ import {
   verifyHumanResultToken,
   verifyHumanProofHeader,
   WorldIdAdapter,
+  worldIdProviderRequestFromRequirement,
   type HumanProofSubmission,
   type HumanResult,
 } from "../src/index.js";
 
 const now = new Date("2026-07-19T12:00:00.000Z");
+const binding = { kind: "agent_key", value: "sha256:agent-key-1" } as const;
+const signingKeyHex = `0x${"ab".repeat(32)}`;
 
 function requirement() {
+  const providerRequest = createWorldIdProviderRequest({
+    appId: "app_test",
+    rpId: "rp_test",
+    action: "x424-test",
+    environment: "staging",
+    signingKeyHex,
+    binding,
+  });
   return createHumanRequirement({
     purpose: "publish-market",
     method: "POST",
     uri: "https://api.example.test/markets",
     audience: "https://api.example.test",
     body: { question: "Will x424 ship?" },
-    binding: { kind: "agent_key", value: "sha256:agent-key-1" },
-    accepts: [
-      {
-        providerId: "world",
-        methodId: "world-id-4-orb",
-        descriptorVersion: "1",
-        assuranceLevel: "orb",
-        acceptedScopeKinds: ["action"],
-        maximumProofAgeSeconds: 300,
-        verificationModes: ["backend"],
-      },
-    ],
+    binding,
+    accepts: [createWorldIdMethodRequirement({ maximumProofAgeSeconds: 300 })],
     providerRequests: {
-      "world:world-id-4-orb": {
-        rpId: "rp_test",
-        action: "x424-test",
-        signedRequest: "provider-native-placeholder",
-      },
+      "world:proof-of-human": providerRequest,
     },
     dependencyId: "x424_dep_test",
     nonce: "nonce-test",
@@ -55,22 +54,36 @@ function requirement() {
   });
 }
 
-function proof(): HumanProofSubmission {
+function proof(required: ReturnType<typeof requirement>): HumanProofSubmission {
+  const providerRequest = worldIdProviderRequestFromRequirement(required);
   return {
     x424Version: "0.1",
     dependencyId: "x424_dep_test",
     providerId: "world",
-    methodId: "world-id-4-orb",
-    binding: { kind: "agent_key", value: "sha256:agent-key-1" },
-    nativeProof: { protocol_version: "4.0", responses: [{ proof: "opaque" }] },
+    methodId: "proof-of-human",
+    binding,
+    nativeProof: {
+      protocol_version: "4.0",
+      nonce: providerRequest.rpContext.nonce,
+      action: providerRequest.action,
+      environment: providerRequest.environment,
+      responses: [
+        {
+          identifier: "proof_of_human",
+          signal_hash: providerRequest.signalHash,
+          proof: ["opaque"],
+        },
+      ],
+    },
   };
 }
 
 describe("x424 wire contract", () => {
   it("round-trips base64url headers without changing the payload", () => {
-    expect(
-      decodeHumanRequirement(encodeHumanRequirement(requirement())),
-    ).toEqual(requirement());
+    const required = requirement();
+    expect(decodeHumanRequirement(encodeHumanRequirement(required))).toEqual(
+      required,
+    );
   });
 
   it("returns 424 and the three x424 transport controls", () => {
@@ -95,15 +108,19 @@ describe("World ID reference adapter and result service", () => {
       rpId: "rp_test",
       action: "x424-test",
       environment: "staging",
-      validateBinding: async ({ nativeProof, expectedBinding }) => {
-        seen.push(nativeProof);
-        return expectedBinding.value === "sha256:agent-key-1";
-      },
       verifyRemote: async (nativeProof) => {
         seen.push(nativeProof);
         return {
           success: true,
-          nullifier: "0xprivate-world-nullifier",
+          action: "x424-test",
+          environment: "staging",
+          results: [
+            {
+              identifier: "proof_of_human",
+              success: true,
+              nullifier: "0xprivate-world-nullifier",
+            },
+          ],
           created_at: now.toISOString(),
         };
       },
@@ -123,10 +140,10 @@ describe("World ID reference adapter and result service", () => {
     await service.register(required);
     const satisfied = await service.satisfy({
       requirement: required,
-      proof: proof(),
+      proof: proof(required),
     });
 
-    expect(seen).toEqual([proof().nativeProof, proof().nativeProof]);
+    expect(seen).toEqual([proof(required).nativeProof]);
     expect(JSON.stringify(satisfied.result)).not.toContain(
       "private-world-nullifier",
     );
@@ -158,8 +175,78 @@ describe("World ID reference adapter and result service", () => {
       }),
     ).rejects.toThrow("already consumed");
     await expect(
-      service.satisfy({ requirement: required, proof: proof() }),
+      service.satisfy({ requirement: required, proof: proof(required) }),
     ).rejects.toThrow("already used");
+  });
+
+  it("rejects a World proof whose signal is not the x424 caller binding", async () => {
+    const adapter = new WorldIdAdapter({
+      rpId: "rp_test",
+      action: "x424-test",
+      environment: "staging",
+      verifyRemote: async () => {
+        throw new Error("remote verifier must not be called");
+      },
+      now: () => now,
+    });
+    const required = requirement();
+    const mismatched = proof(required);
+    const nativeProof = mismatched.nativeProof as {
+      responses: Array<Record<string, unknown>>;
+    };
+    nativeProof.responses[0] = {
+      ...nativeProof.responses[0],
+      signal_hash: "0xwrong",
+    };
+    const service = new X424Service({
+      catalog: defineMethodCatalog(adapter.methods()),
+      adapters: [adapter],
+      nonceStore: new InMemoryNonceStore(),
+      pairwiseSecret: generatePairwiseSecret(),
+      resultSigner: generateResultKeyPair().signer,
+      now: () => now,
+    });
+    await service.register(required);
+
+    await expect(
+      service.satisfy({ requirement: required, proof: mismatched }),
+    ).rejects.toThrow("no accepted Proof of Human response");
+  });
+
+  it("rejects legacy World credentials instead of treating versions as one human", async () => {
+    const adapter = new WorldIdAdapter({
+      rpId: "rp_test",
+      action: "x424-test",
+      environment: "staging",
+      verifyRemote: async () => {
+        throw new Error("remote verifier must not be called");
+      },
+      now: () => now,
+    });
+    const required = requirement();
+    const legacy = proof(required);
+    const nativeProof = legacy.nativeProof as {
+      protocol_version: string;
+      responses: Array<Record<string, unknown>>;
+    };
+    nativeProof.protocol_version = "3.0";
+    nativeProof.responses[0] = {
+      ...nativeProof.responses[0],
+      identifier: "orb",
+    };
+    const service = new X424Service({
+      catalog: defineMethodCatalog(adapter.methods()),
+      adapters: [adapter],
+      nonceStore: new InMemoryNonceStore(),
+      pairwiseSecret: generatePairwiseSecret(),
+      resultSigner: generateResultKeyPair().signer,
+      now: () => now,
+    });
+    await service.register(required);
+
+    await expect(
+      service.satisfy({ requirement: required, proof: legacy }),
+    ).rejects.toThrow("does not match the signed provider request");
   });
 
   it("rejects provider substitution even when both claim unique humanity", () => {
@@ -189,7 +276,7 @@ describe("World ID reference adapter and result service", () => {
     const evaluation = evaluateHumanResult({
       requirement: required,
       result,
-      catalog: defineMethodCatalog([WORLD_ID_ORB_METHOD]),
+      catalog: defineMethodCatalog([WORLD_ID_PROOF_OF_HUMAN_METHOD]),
       now,
     });
     expect(evaluation.satisfied).toBe(false);
@@ -202,7 +289,10 @@ describe("World ID reference adapter and result service", () => {
 describe("method catalog", () => {
   it("requires explicit non-claims and rejects duplicates", () => {
     expect(() =>
-      defineMethodCatalog([WORLD_ID_ORB_METHOD, WORLD_ID_ORB_METHOD]),
+      defineMethodCatalog([
+        WORLD_ID_PROOF_OF_HUMAN_METHOD,
+        WORLD_ID_PROOF_OF_HUMAN_METHOD,
+      ]),
     ).toThrow("Duplicate human method");
   });
 });

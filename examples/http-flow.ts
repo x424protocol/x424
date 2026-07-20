@@ -1,8 +1,23 @@
 import {
   createHumanRequirement,
+  createWorldIdMethodRequirement,
+  createWorldIdProviderRequest,
   decodeHumanRequirement,
   humanRequiredResponse,
 } from "../src/index.js";
+
+const binding = {
+  kind: "agent_key",
+  value: "sha256:agent-public-key",
+} as const;
+const providerRequest = createWorldIdProviderRequest({
+  appId: "app_example",
+  rpId: "rp_example",
+  action: "publish-record",
+  environment: "staging",
+  signingKeyHex: `0x${"ab".repeat(32)}`,
+  binding,
+});
 
 const requirement = createHumanRequirement({
   purpose: "publish-record",
@@ -10,23 +25,10 @@ const requirement = createHumanRequirement({
   uri: "https://api.example.test/records",
   audience: "https://api.example.test",
   body: { title: "A human-gated record" },
-  binding: { kind: "agent_key", value: "sha256:agent-public-key" },
-  accepts: [
-    {
-      providerId: "world",
-      methodId: "world-id-4-orb",
-      descriptorVersion: "1",
-      assuranceLevel: "orb",
-      acceptedScopeKinds: ["action"],
-      verificationModes: ["backend"],
-    },
-  ],
+  binding,
+  accepts: [createWorldIdMethodRequirement()],
   providerRequests: {
-    "world:world-id-4-orb": {
-      rpId: "rp_example",
-      action: "publish-record",
-      signedRequest: "issued-by-the-relying-party-backend",
-    },
+    "world:proof-of-human": providerRequest,
   },
 });
 

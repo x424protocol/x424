@@ -5,6 +5,7 @@ export * from "./http.js";
 export * from "./nonce-store.js";
 export * from "./policy.js";
 export * from "./provider-sdk.js";
+export * from "./requirement-store.js";
 export * from "./requirements.js";
 export * from "./result-token.js";
 export * from "./schemas.js";

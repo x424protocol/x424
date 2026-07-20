@@ -6,10 +6,14 @@ import {
   InMemoryNonceStore,
   WorldIdAdapter,
   X424Service,
+  createWorldIdMethodRequirement,
+  createWorldIdProviderRequest,
   createX424HttpRouter,
   defineMethodCatalog,
   generatePairwiseSecret,
   generateResultKeyPair,
+  worldIdProviderRequestFromRequirement,
+  type HumanRequirement,
 } from "../src/index.js";
 
 describe("reference HTTP API", () => {
@@ -22,10 +26,17 @@ describe("reference HTTP API", () => {
       rpId: "rp_test",
       action: "x424-test",
       environment: "staging",
-      validateBinding: async () => true,
       verifyRemote: async () => ({
         success: true,
-        nullifier: "0xnever-public",
+        action: "x424-test",
+        environment: "staging",
+        results: [
+          {
+            identifier: "proof_of_human",
+            success: true,
+            nullifier: "0xnever-public",
+          },
+        ],
         created_at: new Date().toISOString(),
       }),
     });
@@ -41,12 +52,16 @@ describe("reference HTTP API", () => {
     app.use(
       createX424HttpRouter({
         service,
-        providerRequests: async () => ({
-          "world:world-id-4-orb": {
+        providerRequests: async ({ binding, ttlSeconds }) => ({
+          "world:proof-of-human": createWorldIdProviderRequest({
+            appId: "app_test",
             rpId: "rp_test",
             action: "x424-test",
-            signedRequest: "opaque",
-          },
+            environment: "staging",
+            signingKeyHex: `0x${"ab".repeat(32)}`,
+            binding,
+            ttlSeconds,
+          }),
         }),
       }),
     );
@@ -65,26 +80,17 @@ describe("reference HTTP API", () => {
         uri: "https://api.example.test/action",
         audience: "https://api.example.test",
         binding: { kind: "agent_key", value: "sha256:test" },
-        accepts: [
-          {
-            providerId: "world",
-            methodId: "world-id-4-orb",
-            descriptorVersion: "1",
-            assuranceLevel: "orb",
-            acceptedScopeKinds: ["action"],
-            verificationModes: ["backend"],
-          },
-        ],
+        accepts: [createWorldIdMethodRequirement()],
       }),
     });
     expect(created.status).toBe(201);
     expect(created.headers.get("human-required")).toBeTruthy();
     const createdBody = (await created.json()) as {
-      requirement: {
-        dependencyId: string;
-        binding: { kind: "agent_key"; value: string };
-      };
+      requirement: HumanRequirement;
     };
+    const providerRequest = worldIdProviderRequestFromRequirement(
+      createdBody.requirement,
+    );
 
     const verified = await fetch(
       `${base}/v1/requirements/${createdBody.requirement.dependencyId}/verify`,
@@ -95,9 +101,21 @@ describe("reference HTTP API", () => {
           x424Version: "0.1",
           dependencyId: createdBody.requirement.dependencyId,
           providerId: "world",
-          methodId: "world-id-4-orb",
+          methodId: "proof-of-human",
           binding: createdBody.requirement.binding,
-          nativeProof: { protocol_version: "4.0", proof: "opaque" },
+          nativeProof: {
+            protocol_version: "4.0",
+            nonce: providerRequest.rpContext.nonce,
+            action: providerRequest.action,
+            environment: providerRequest.environment,
+            responses: [
+              {
+                identifier: "proof_of_human",
+                signal_hash: providerRequest.signalHash,
+                proof: ["opaque"],
+              },
+            ],
+          },
         }),
       },
     );

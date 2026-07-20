@@ -1,0 +1,40 @@
+name: Provider profile
+description: Propose an exact unique-human provider method.
+title: "provider: "
+labels: ["provider"]
+body:
+  - type: input
+    id: identifier
+    attributes:
+      label: Provider method identifier
+      placeholder: provider:method@version
+    validations:
+      required: true
+  - type: textarea
+    id: claim
+    attributes:
+      label: Exact claim and non-claims
+      description: State what a positive result proves and what it does not prove.
+    validations:
+      required: true
+  - type: textarea
+    id: semantics
+    attributes:
+      label: Scope, binding, replay, and recovery
+      description: Document uniqueness scope, subject binding, freshness, replay, rotation, revocation, and recovery.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and data handling
+      description: Document linkability, retention, deletion, residency, and verifier-visible data.
+    validations:
+      required: true
+  - type: textarea
+    id: fixtures
+    attributes:
+      label: Provider-native fixtures
+      description: List positive and negative fixtures, including substitution and outage cases.
+    validations:
+      required: true

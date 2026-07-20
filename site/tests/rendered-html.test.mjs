@@ -29,7 +29,8 @@ test("server-renders the x424 landing page", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>x424 — Human Dependency Protocol<\/title>/i);
-  assert.match(html, /Make an HTTP action depend on one human\./);
+  assert.match(html, /Make an HTTP action depend on one accepted human\./);
+  assert.match(html, /One explicitly accepted provider method\./);
   assert.match(html, /github\.com\/x424protocol\/x424/);
   assert.match(html, /424 Failed Dependency/);
   assert.match(html, /HUMAN-REQUIRED/);
