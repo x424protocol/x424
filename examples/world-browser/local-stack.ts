@@ -31,7 +31,8 @@ const port = Number(process.env.PORT ?? 9070);
 const audience = `http://127.0.0.1:${port}`;
 const keys = generateResultKeyPair("local-stack");
 const catalog = defineMethodCatalog([WORLD_ID_PROOF_OF_HUMAN_METHOD]);
-const requirementStore = new InMemoryRequirementStore();
+const verifierRequirementStore = new InMemoryRequirementStore();
+const resourceRequirementStore = new InMemoryRequirementStore();
 const replayStore = new InMemoryResultReplayStore();
 
 const fakeWorldAdapter: HumanProviderAdapter = {
@@ -50,6 +51,7 @@ const fakeWorldAdapter: HumanProviderAdapter = {
       providerId: "world",
       methodId: "proof-of-human",
       descriptorVersion: "1",
+      assuranceLevel: "proof-of-human",
       providerSubject: "fake-nullifier-never-returned",
       uniquenessScope: { kind: "action", id: "world:action:publish-record" },
       verificationMode: "backend",
@@ -75,7 +77,7 @@ app.use(express.json({ limit: "64kb" }));
 app.use(
   createX424HttpRouter({
     service,
-    requirementStore,
+    requirementStore: verifierRequirementStore,
     deploymentProfile: "dev-local-0.1",
     allowUnauthenticatedIssuance: true,
     providerRequests: async () => ({
@@ -120,7 +122,8 @@ app.post(
           },
         },
       });
-      await requirementStore.put(requirement);
+      await verifierRequirementStore.put(requirement);
+      await resourceRequirementStore.put(requirement);
       await service.register(requirement);
       const challenge = humanRequiredResponse(requirement);
       for (const [key, value] of Object.entries(challenge.headers)) {
@@ -137,7 +140,7 @@ app.post(
     accepts: createWorldIdMethodRequirements({ allowLegacyProofs: false }),
     catalog,
     verifier: keys.verifier,
-    requirementStore,
+    requirementStore: resourceRequirementStore,
     replayStore,
     publicOrigin: { publicOrigin: audience },
     requireIdempotencyKey: false,

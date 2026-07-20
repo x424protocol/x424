@@ -61,8 +61,8 @@ Purpose: make both self-hosted and managed verification operationally safe.
 - [x] Maintained Fetch, Express, and Next.js resource middleware
 - [x] Managed verifier client and remote atomic-store adapters
 - [x] Proof-safe errors, shared rate limits, egress controls, and runbooks
-- World staging, browser, mobile-web, REST, and agent-key matrices
-- Fuzz, dependency, load, chaos, security, and privacy assessment
+- [ ] World staging, browser, mobile-web, REST, and agent-key matrices
+- [ ] Fuzz, dependency, load, chaos, security, and privacy assessment
 - [x] Deterministic x424-before-x402 server and client composition
 
 Exit: a reviewed deployment protects production access, meets the named 99.9%
@@ -73,14 +73,14 @@ integrated from public documentation in one working day.
 
 Purpose: prove x424 is a protocol rather than one TypeScript package.
 
-- Black-box conformance suites for clients, resources, verifiers, stores, and
-  provider adapters
-- Independently authored Go implementation and mixed-stack flows
-- Second provider with a materially different root of trust and lifecycle
-- Independently operated verifier with operator-swap evidence
-- Two unrelated production adopters using public surfaces only
-- Public compatibility matrix covering providers, implementations, deployment
-  modes, browsers, agents, and x402 composition
+- [ ] Black-box conformance suites for clients, resources, verifiers, stores, and
+      provider adapters
+- [ ] Independently authored Go implementation and mixed-stack flows
+- [ ] Second provider with a materially different root of trust and lifecycle
+- [ ] Independently operated verifier with operator-swap evidence
+- [ ] Two unrelated production adopters using public surfaces only
+- [ ] Public compatibility matrix covering providers, implementations, deployment
+      modes, browsers, agents, and x402 composition
 
 Exit: independently operated components interoperate without private guidance
 or a privileged implementation path.
@@ -89,12 +89,12 @@ or a privileged implementation path.
 
 Purpose: freeze the smallest contract the ecosystem has already proven.
 
-- Formal canonicalization, transport, signature, replay, and downgrade profile
-- Stable provider namespace, compatibility, migration, and deprecation policy
-- Permanent conformance bundles and public interoperability results
-- Security/privacy delta review against the frozen specification
-- Independent protocol, provider, verifier, and adopter representation
-- Recorded decision on an appropriate neutral standards venue
+- [ ] Formal canonicalization, transport, signature, replay, and downgrade profile
+- [ ] Stable provider namespace, compatibility, migration, and deprecation policy
+- [ ] Permanent conformance bundles and public interoperability results
+- [ ] Security/privacy delta review against the frozen specification
+- [ ] Independent protocol, provider, verifier, and adopter representation
+- [ ] Recorded decision on an appropriate neutral standards venue
 
 The stable gates in [GOVERNANCE.md](GOVERNANCE.md) remain authoritative.
 

@@ -13,6 +13,7 @@ const verifierUrl = process.env.X424_VERIFIER_URL ?? "http://127.0.0.1:9070/";
 
 const resolveHumanDependency = createHttpHumanDependencyResolver({
   verifierUrl,
+  allowHttpLocalhost: true,
   resolveProviderProof: async ({ requirement }) => {
     const accepted = requirement.accepts[0];
     if (!accepted) throw new Error("No accepted method");
@@ -45,14 +46,21 @@ const response = await fetchWithX424(
   },
   { resolveHumanDependency },
 );
+const body = await response.text();
 
 console.log(
   JSON.stringify(
     {
       status: response.status,
-      body: await response.text(),
+      body,
     },
     null,
     2,
   ),
 );
+
+if (response.status !== 201) {
+  throw new Error(
+    `Expected protected action to return 201, received ${response.status}`,
+  );
+}

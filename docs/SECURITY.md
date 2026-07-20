@@ -2,8 +2,9 @@
 
 ## Status
 
-Unaudited pre-alpha. The reference router and in-memory stores must not protect
-production access or value.
+x424/0.1 developer preview · unaudited. The reference router and in-memory
+stores must not protect production access or value. See the public
+[status matrix](STATUS.md) for implemented and missing evidence.
 
 ## Invariants
 

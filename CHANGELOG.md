@@ -6,6 +6,15 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+### Fixed
+
+- The local World fixture flow now keeps verifier and resource requirement
+  state separate, permits HTTP only for localhost evaluation, supplies the
+  accepted World assurance label, and fails unless the protected retry returns
+  `201`.
+- The landing page now uses valid responsive width calculations instead of
+  clipping desktop content on mobile viewports.
+
 ### Security
 
 - Resource middleware now re-validates current method, URI, body digest,
@@ -28,6 +37,10 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ### Added
 
+- A one-command, CI-enforced local quickstart plus public maturity/evidence
+  matrix for developer onboarding.
+- Adoption-oriented website sections for provider-vs-x424 selection,
+  responsibility boundaries, quickstart, and honest release status.
 - A focused `test:adopter-contract` command for automated adopter compatibility
   gates covering valid World verification, request binding, replay rejection,
   provider-request policy, privacy, and public HTTP behavior.
@@ -76,6 +89,9 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ### Changed
 
+- Standardized public maturity language on “x424/0.1 developer preview ·
+  unaudited” and aligned README, website, security, roadmap, and package-facing
+  discovery copy.
 - Authenticated issuance can use exactly one provider-request source:
   verifier-generated or adopter-supplied signed material validated by the
   provider adapter before nonce registration.

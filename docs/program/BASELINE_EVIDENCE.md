@@ -1,8 +1,8 @@
 # Current-state baseline evidence
 
 Baseline date: 2026-07-20
-Working-tree parent commit: `0220d8f9303bf7cbe662652bf7fd8616df00d62c`
-Branch: `codex/global-standard-readiness`
+Working-tree parent commit: `50fa0ce8f95e1ce60b825d8eb386445bd3b2d6f9`
+Branch: `codex/public-adoption-hygiene`
 Package: `x424@0.1.0`
 
 This file is the living P0-02 evidence surface. A changed baseline is not
@@ -24,12 +24,14 @@ after a real CI execution for the reviewed commit/tree.
 | Transport         | header ≤8 KiB; body transport above envelope                       |
 | Deployment        | runnable Redis image source, Compose profile, Helm chart           |
 | Site              | `site/` — Node ≥22 vinext build verified locally                   |
+| Quickstart        | one-command synthetic challenge/proof/retry flow, enforced in CI   |
 
 ## Maturity table
 
-Unchanged in substance from the prior baseline: developer preview / unaudited
-pre-alpha. Production profiles exist as code and docs, not as independently
-assessed deployments.
+x424/0.1 developer preview / unaudited. Production-candidate surfaces exist as
+code and docs, not as independently assessed deployments. The public
+[`STATUS.md`](../STATUS.md) matrix separates implemented, tested, and missing
+external evidence.
 
 ## Metrics
 

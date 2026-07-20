@@ -10,7 +10,7 @@ approvals, deployments, adopters, or artifact URLs.
 | ------------------------ | ------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
 | 0.1 wire and schemas     | partial            | protocol, schemas, OpenAPI, vectors, security regressions  | independent design/threat review                                  |
 | 0.1 package              | partial            | build, pack smoke, provenance workflow                     | authorized npm tag and reproducibility record                     |
-| 0.1 developer experience | partial            | World and HTTP examples                                    | managed sandbox and timed unfamiliar-developer run                |
+| 0.1 developer experience | partial            | automated one-command flow, World and HTTP examples        | managed sandbox and timed unfamiliar-developer run                |
 | 0.2 self-hosted verifier | partial            | runnable Redis image, Helm, metadata, key interfaces       | Docker/Helm runtime evidence, signed image, SBOM, assessment      |
 | 0.2 managed verifier     | partial            | public issuance/state/replay client and OpenAPI            | separate conforming service, console, tenant/security review      |
 | 0.2 frameworks           | partial            | Express, Fetch, and Next.js parity tests                   | real World browser/mobile matrix                                  |

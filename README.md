@@ -3,40 +3,51 @@
 [![CI](https://github.com/x424protocol/x424/actions/workflows/ci.yml/badge.svg)](https://github.com/x424protocol/x424/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-> Human Dependency Protocol · public pre-alpha · unaudited
+> Human Dependency Protocol · x424/0.1 developer preview · unaudited
 
 **x424 makes unique humanity a native HTTP dependency—for users, agents, and
 APIs.** A resource can require one explicitly accepted unique human without
 turning any provider into a universal identity authority.
 
-[Protocol](docs/PROTOCOL.md) · [Adoption contract](docs/ADOPTER_CONTRACT.md) ·
-[Roadmap](docs/ROADMAP.md) · [OpenAPI](openapi/x424.openapi.json) ·
-[Conformance](conformance/v0.1/README.md) · [Governance](docs/GOVERNANCE.md)
+[10-minute quickstart](docs/QUICKSTART.md) · [Current status](docs/STATUS.md) ·
+[Protocol](docs/PROTOCOL.md) · [Adoption guide](docs/ADOPTION.md) ·
+[Roadmap](docs/ROADMAP.md) · [Security](docs/SECURITY.md) ·
+[OpenAPI](openapi/x424.openapi.json)
 
 ## Why x424
 
-Unique-human providers prove different things, but every application currently
-rebuilds the same dependency machinery: challenge discovery, request binding,
-provider handoff, verifier submission, replay prevention, result validation,
-and retry.
+Products that require unique humanity repeatedly rebuild the same HTTP
+machinery around provider SDKs: challenge discovery, request binding, provider
+handoff, verifier submission, replay prevention, result validation, and retry.
 
-x424 standardizes that machinery. A resource names the exact provider methods
+x424 makes that machinery reusable. A resource names the exact provider methods
 it accepts. A human completes one method. A verifier returns a short-lived
 result bound to the request and caller. The client retries with that result.
 
+| Requirement                                                      | Use                            |
+| ---------------------------------------------------------------- | ------------------------------ |
+| Login or enroll with one provider                                | Use that provider directly     |
+| Require one accepted unique human before an HTTP action executes | Use x424                       |
+| Require unique humanity before payment                           | Compose x424 before x402       |
+| Decide whether the caller may perform the action                 | Keep application authorization |
+
 When a service also requires payment, the layers stay independent:
 
-```text
-authentication -> x424 -> x402 -> authorization -> execution
+```mermaid
+flowchart LR
+  A["Authenticate caller"] --> H["x424: require unique humanity"]
+  H --> P["x402: require payment"]
+  P --> Z["Application authorization"]
+  Z --> E["Execute idempotently"]
 ```
 
 x424 standardizes the dependency, not the underlying proof system. It does not
 define a human identity, equate providers, create an account, or authorize the
 application action.
 
-Use a provider such as World directly when a product only needs login or
-account enrollment. Use x424 when satisfying an accepted unique-human method
-is a condition for executing an HTTP action. Providers prove uniqueness, x424
+World is the first maintained provider profile. It proves its own exact claim;
+x424 does not rename World, parse its proof in application code, or turn it
+into a universal identity authority. Providers prove uniqueness, x424
 standardizes the dependency, and the application remains the authorization
 authority.
 
@@ -91,8 +102,8 @@ Idempotency-Key: <application-key-for-mutations>
 
 ## Current status
 
-x424/0.1 is a developer preview, not a production security product or an IETF
-standard. The repository now includes:
+x424/0.1 is an **unaudited developer preview**, not a production security
+certification or accepted global standard. The repository includes:
 
 - canonical requirement/result codecs and request digests;
 - exact audience, purpose, time, request, and caller binding;
@@ -110,23 +121,29 @@ standard. The repository now includes:
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
 
-It remains **unaudited** and does not yet include the separately operated
-managed service/console, an externally validated HSM integration, or an
-independent implementation. Deployability is not the 0.2 production gate;
-follow the evidence requirements in the [roadmap](docs/ROADMAP.md).
+It does not yet include a public managed service/console, completed external
+security review, published real-World staging matrix, or independent
+implementation. Deployability is not the 0.2 production gate. See the
+[current evidence matrix](docs/STATUS.md) and [roadmap](docs/ROADMAP.md) before
+making production or standards claims.
 
-## Try the developer preview
+## Run the complete local flow
 
-The first npm release has not been published. Run the current source directly:
+The first npm release has not been published. The source quickstart exercises
+`424 → provider proof → signed result → exact retry → 201` with synthetic World
+fixtures:
 
 ```bash
 git clone https://github.com/x424protocol/x424.git
 cd x424
 corepack enable
 pnpm install
-pnpm check
-pnpm example
+pnpm quickstart
 ```
+
+This is an automated local evaluation flow, not real World verification. Read
+the [ten-minute quickstart](docs/QUICKSTART.md) for what it proves and the path
+to World staging, self-hosted Redis, framework, and x402 integrations.
 
 After the first release, the supported install command will be:
 
@@ -405,6 +422,8 @@ deploy/verifier/         Runnable non-root image, Compose profile, and Helm char
 test/                    Core, security, provider, Redis, and contract tests
 docs/PROTOCOL.md          Normative x424/0.1 contract
 docs/ADOPTER_CONTRACT.md  Off-the-shelf responsibility boundary
+docs/QUICKSTART.md         One-command local challenge/proof/retry flow
+docs/STATUS.md             Implemented, tested, and missing public evidence
 docs/ROADMAP.md           Release and standards-readiness gates
 docs/SECURITY.md          Threat model and production controls
 docs/GOVERNANCE.md        Neutral change control and stable 1.0 gates
