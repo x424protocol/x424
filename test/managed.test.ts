@@ -33,6 +33,32 @@ describe("managed verifier client", () => {
       if (request.url.includes("/.well-known/x424-verifier")) {
         return Response.json({ token: "signed-metadata" });
       }
+      if (request.url.endsWith("/handoffs") && request.method === "POST") {
+        return Response.json(
+          {
+            handoffId: "handoff-1",
+            accessToken: "A".repeat(43),
+            status: "pending",
+            providerId: "example",
+            methodId: "unique-human",
+            presentation: {
+              kind: "uri",
+              uri: "https://connector.example.test",
+            },
+            expiresAt: issued.expiresAt,
+            pollAfterMs: 1000,
+          },
+          { status: 201 },
+        );
+      }
+      if (request.url.includes("/v1/handoffs/") && request.method === "GET") {
+        return Response.json({
+          handoffId: "handoff-1",
+          status: "pending",
+          expiresAt: issued.expiresAt,
+          pollAfterMs: 1000,
+        });
+      }
       if (
         request.url.endsWith("/v1/requirements") &&
         request.method === "POST"
@@ -40,6 +66,9 @@ describe("managed verifier client", () => {
         return Response.json({ requirement: issued }, { status: 201 });
       }
       if (request.url.includes("/v1/results/")) {
+        if (request.url.endsWith("/acceptances")) {
+          return Response.json({ status: "same_operation" });
+        }
         return Response.json({ consumed: true });
       }
       if (request.method === "DELETE")
@@ -73,12 +102,32 @@ describe("managed verifier client", () => {
     await expect(
       client.consumeResult("x424_result_test", issued.expiresAt),
     ).resolves.toBe(true);
+    await expect(
+      client.acceptResult({
+        resultId: "x424_result_test",
+        operationId: "operation-1",
+        requestDigest: issued.resource.requestDigest,
+        expiresAt: issued.expiresAt,
+      }),
+    ).resolves.toBe("same_operation");
     await expect(client.deleteRequirement(issued.dependencyId)).resolves.toBe(
       undefined,
     );
     await expect(client.getMetadataToken()).resolves.toBe("signed-metadata");
+    const started = await client.startHandoff({
+      dependencyId: issued.dependencyId,
+      nonce: issued.nonce,
+      providerId: "example",
+      methodId: "unique-human",
+    });
+    await expect(
+      client.getHandoff(started.handoffId, started.accessToken),
+    ).resolves.toMatchObject({ status: "pending" });
+    await expect(
+      client.cancelHandoff(started.handoffId, started.accessToken),
+    ).resolves.toBeUndefined();
 
-    expect(requests).toHaveLength(5);
+    expect(requests).toHaveLength(9);
     expect(requests.every((request) => request.redirect === "manual")).toBe(
       true,
     );
@@ -92,6 +141,9 @@ describe("managed verifier client", () => {
       kind: "opaque",
       bytesBase64url: "aGVsbG8",
     });
+    expect(requests[7]!.headers.get("authorization")).toBe(
+      `Bearer ${"A".repeat(43)}`,
+    );
   });
 
   it("rejects redirects without resending credentials", async () => {

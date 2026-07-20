@@ -99,15 +99,26 @@ invent or imply one.
 ## Agent flow
 
 An agent can detect and escalate the dependency without receiving a provider
-nullifier:
+nullifier or native proof. Remote and unattended agents use verifier-brokered
+handoff by default:
 
-1. the agent receives `424 + HUMAN-REQUIRED`;
-2. it presents the exact accepted methods and binding through a trusted wallet
-   or user interface;
-3. the human completes one accepted provider method;
-4. the verifier returns a short-lived result bound to the agent-key
-   fingerprint and request; and
-5. the agent retries with `HUMAN-PROOF`.
+1. the agent signs the exact request and receives `424 + HUMAN-REQUIRED`;
+2. it starts a handoff using the exact dependency nonce and accepted method;
+3. a terminal, callback, or NDJSON presenter exposes the short-lived connector
+   URI to the human;
+4. the human completes one accepted provider method;
+5. the verifier returns only a short-lived result bound to the proven agent
+   key and request; and
+6. the agent re-signs and retries with `HUMAN-PROOF`.
+
+Use `createX424AgentClient()` for this flow and `x424-agent` when the caller is
+a CLI process. The CLI accepts only an absolute `--signer-command`; it does not
+accept private keys through arguments or environment variables and invokes the
+signer without a shell. `--json` emits stable NDJSON handoff events.
+
+The resource server must call `verifyX424AgentRequest()` before issuing an
+`agent_key`-bound requirement or accepting its result. Merely copying a key ID
+into a binding does not prove possession.
 
 Durable ownership, delegation, recovery, budgets, and revocation remain in a
 separate authorization or mandate system.
@@ -130,7 +141,8 @@ body factory) across the three-request sequence.
 ## Managed and self-hosted parity
 
 `ManagedVerifierClient` implements authenticated remote issuance, retained
-requirement lookup/deletion, and atomic result consumption. A resource server
+requirement lookup/deletion, brokered handoff, atomic result consumption, and
+same-operation result acceptance. A resource server
 switches operators by changing its issuer/store configuration. In issuer mode,
 the adopter backend signs World RP request material and submits only that
 material; the managed verifier never receives the World RP signing key.
@@ -142,7 +154,9 @@ production verifier requires evidence for:
 
 - authenticated requirement issuance;
 - distributed atomic requirement, dependency nonce, provider-subject, and
-  result-consumption stores (the package includes a Redis implementation);
+  result-consumption/acceptance stores (the package includes Redis and
+  PostgreSQL implementations);
+- encrypted durable handoff state and bearer-capability digest storage;
 - managed signing and pairwise-derivation keys;
 - strict provider origin, environment, method, and response validation;
 - rate limits and capacity controls;

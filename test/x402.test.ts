@@ -1,12 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   HUMAN_PROOF_HEADER,
+  InMemoryRequirementStore,
+  InMemoryResultAcceptanceStore,
+  InMemoryResultReplayStore,
   composeFetchX424BeforeX402,
   createOfficialX402PaymentResolver,
   createHumanRequirement,
+  defineHumanMethodDescriptor,
+  defineMethodCatalog,
   fetchWithX424AndX402,
+  generateResultKeyPair,
   humanRequiredResponse,
+  sha256,
+  signHumanResult,
 } from "../src/index.js";
+import { protectFetchResource } from "../src/middleware/resource.js";
 
 function challenge() {
   return humanRequiredResponse(
@@ -120,6 +129,121 @@ describe("x424 before x402", () => {
     expect(requests[2]!.headers.get(HUMAN_PROOF_HEADER)).toBe("human-token");
     expect(requests[2]!.headers.get("payment-signature")).toBe("payment-token");
     expect(await requests[2]!.text()).toBe(JSON.stringify({ title: "Hello" }));
+  });
+
+  it("accepts the same human result across a real x424 then x402 server flow", async () => {
+    const descriptor = defineHumanMethodDescriptor({
+      providerId: "example",
+      methodId: "unique-human",
+      version: "1",
+      status: "enabled",
+      claim: "Example unique human",
+      nonClaims: ["Authorization"],
+      assuranceLevels: [],
+      nativeScopeKinds: ["relying_party"],
+      verificationModes: ["backend"],
+      pairwisePseudonym: true,
+      replaySemantics: "single-use",
+      recoverySemantics: "provider-defined",
+      privacy: "pairwise",
+    });
+    const keys = generateResultKeyPair();
+    const requirementStore = new InMemoryRequirementStore();
+    const resultAcceptanceStore = new InMemoryResultAcceptanceStore();
+    const options = {
+      deploymentProfile: "dev-local-0.1" as const,
+      purpose: "paid-record",
+      audience: "https://api.example.test",
+      accepts: [
+        {
+          providerId: descriptor.providerId,
+          methodId: descriptor.methodId,
+          descriptorVersion: descriptor.version,
+          acceptedScopeKinds: ["relying_party" as const],
+        },
+      ],
+      catalog: defineMethodCatalog([descriptor]),
+      verifier: keys.verifier,
+      extractBinding: async () => ({
+        kind: "agent_key" as const,
+        value: "sha256:agent",
+      }),
+      requirementStore,
+      replayStore: new InMemoryResultReplayStore(),
+      resultAcceptanceStore,
+      publicOrigin: { publicOrigin: "https://api.example.test" },
+      requireIdempotencyKey: true,
+      bodyInput: { kind: "json" as const, value: { title: "Hello" } },
+    };
+    const serverFetch = async (request: Request): Promise<Response> => {
+      const protectedResult = await protectFetchResource(request, options);
+      if (protectedResult.response) return protectedResult.response;
+      if (!request.headers.has("payment-signature")) {
+        return new Response(null, {
+          status: 402,
+          headers: { "payment-required": "x402-challenge" },
+        });
+      }
+      return new Response("created", { status: 201 });
+    };
+
+    const response = await fetchWithX424AndX402(
+      "https://api.example.test/records",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "operation-real-server",
+        },
+        body: JSON.stringify({ title: "Hello" }),
+      },
+      {
+        fetchImplementation: serverFetch as typeof fetch,
+        resolveHumanDependency: async ({ requirement }) => ({
+          humanProof: signHumanResult(
+            {
+              x424Version: "0.1",
+              resultId: "x424_result_real_x402",
+              dependencyId: requirement.dependencyId,
+              satisfied: true,
+              purpose: requirement.purpose,
+              audience: requirement.resource.audience,
+              requestDigest: requirement.resource.requestDigest,
+              binding: requirement.binding,
+              providerId: descriptor.providerId,
+              methodId: descriptor.methodId,
+              descriptorVersion: descriptor.version,
+              pairwiseHumanId: "x424_human_real_x402",
+              uniquenessScope: {
+                kind: "relying_party",
+                id: "example:rp",
+              },
+              verificationMode: "backend",
+              proofDigest: sha256("proof"),
+              claim: descriptor.claim,
+              nonClaims: descriptor.nonClaims,
+              verifiedAt: requirement.createdAt,
+              issuedAt: requirement.createdAt,
+              expiresAt: requirement.expiresAt,
+            },
+            keys.signer,
+          ),
+        }),
+        resolvePaymentDependency: async () => ({
+          paymentSignature: "payment-token",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(201);
+    await expect(
+      resultAcceptanceStore.accept({
+        resultId: "x424_result_real_x402",
+        operationId: "different-operation",
+        requestDigest: "sha256:different",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    ).resolves.toBe("replay");
   });
 
   it("fails when a server evaluates payment before humanity", async () => {

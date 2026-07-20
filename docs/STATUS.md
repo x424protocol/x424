@@ -9,16 +9,18 @@ release gates remain in the [roadmap](ROADMAP.md) and
 
 ## What exists now
 
-| Surface                     | State                                | Evidence                                                          |
-| --------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
-| HTTP wire contract          | Implemented and locally tested       | Protocol, schemas, OpenAPI, conformance vectors                   |
-| TypeScript SDK              | Implemented and locally tested       | 20 test files / 83 tests; package build and pack smoke            |
-| World profile               | Synthetic positive/negative coverage | v4 default, legacy opt-in, provider-request vectors               |
-| Framework adapters          | Implemented and locally tested       | Fetch, Express, and Next.js parity tests                          |
-| Self-hosted verifier        | Runnable evaluation profile          | Non-root image source, Compose, Redis, Helm templates             |
-| Managed-verifier interfaces | Implemented and locally tested       | Authenticated issuance, metadata, requirement and replay clients  |
-| x424 before x402            | Implemented and locally tested       | Ordered middleware/client helpers and official x402-package tests |
-| Developer quickstart        | Automated in CI                      | One command exercises challenge, proof, retry, and 201 result     |
+| Surface                     | State                                | Evidence                                                         |
+| --------------------------- | ------------------------------------ | ---------------------------------------------------------------- |
+| HTTP wire contract          | Implemented and locally tested       | Protocol, schemas, OpenAPI, conformance vectors                  |
+| TypeScript SDK              | Implemented and locally tested       | Core, agent, handoff, framework, store, and package test suites  |
+| World profile               | Synthetic positive/negative coverage | v4 default, legacy opt-in, provider-request vectors              |
+| Framework adapters          | Implemented and locally tested       | Fetch, Express, and Next.js parity tests                         |
+| Self-hosted verifier        | Runnable evaluation profile          | Non-root image source, Compose, Redis, Helm templates            |
+| Managed-verifier interfaces | Implemented and locally tested       | Issuance, metadata, requirement, replay, acceptance, handoff     |
+| Agent key possession        | Implemented and locally tested       | Ed25519, EIP-191, ERC-1271, Content-Digest, exact retry nonce    |
+| Brokered human handoff      | Implemented with a World HA caveat   | Generic Redis/PostgreSQL CAS; public-IDKit process-local session |
+| x424 before x402            | Implemented and locally tested       | Same-operation acceptance across the real three-request flow     |
+| Developer quickstart        | Automated in CI                      | One command exercises challenge, proof, retry, and 201 result    |
 
 “Implemented and locally tested” does not mean independently audited,
 production-operated, or interoperable across independent implementations.
@@ -28,6 +30,8 @@ production-operated, or interoperable across independent implementations.
 - no independent security or privacy assessment is complete;
 - no public managed verifier or self-service console is live;
 - no real World staging browser/mobile matrix is published;
+- World public IDKit cannot resume an active brokered session after verifier
+  process loss, so the World handoff path has not met the HA restart gate;
 - no production load, failover, backup/restore, or key-compromise exercise is
   published;
 - no independently authored Go implementation has passed mixed-stack flows;

@@ -109,14 +109,20 @@ certification or accepted global standard. The repository includes:
 - exact audience, purpose, time, request, and caller binding;
 - Ed25519 signed results and pairwise human identifiers;
 - atomic-store interfaces plus Redis-backed requirement, dependency,
-  provider-subject, and result replay state;
+  provider-subject, handoff, replay, and same-operation result-acceptance
+  state, with PostgreSQL parity;
 - a provider-adapter SDK and fixed negative conformance vectors;
 - a reusable World verifier profile with signed RP requests, built-in signal
   binding, and an explicit legacy Orb fallback method;
 - a generic HTTP verifier resolver and one-challenge/one-retry client;
 - maintained Express, Fetch, and Next.js resource adapters;
-- authenticated managed-verifier issuance/state/replay clients;
-- deterministic x424-before-x402 server and client composition;
+- authenticated managed-verifier issuance/state/replay/handoff clients;
+- provider-neutral brokered human handoff and a World IDKit adapter;
+- RFC 9421-style agent request signing for Ed25519, EIP-191, and ERC-1271;
+- `createX424AgentClient()` plus terminal, callback, NDJSON, and safe CLI
+  presenters;
+- deterministic x424-before-x402 server and client composition with
+  same-operation acceptance;
 - a runnable non-root Redis verifier image and Helm chart;
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
@@ -314,6 +320,17 @@ const protection = {
 The client pins the configured origin, refuses redirects, bounds responses,
 and never submits provider signing keys.
 
+For production mutations configure both durable stores:
+
+```ts
+const protection = {
+  requirementIssuer: managed,
+  requirementStore: managed.requirementStore(),
+  replayStore: managed.resultReplayStore(),
+  resultAcceptanceStore: managed.resultAcceptanceStore(),
+};
+```
+
 ## Accept the retried request
 
 ```ts
@@ -331,9 +348,11 @@ const result = await verifyHumanProofHeader({
 // idempotently.
 ```
 
-For mutations, consume `resultId` atomically and use the application's normal
-idempotency mechanism. x424 prevents human-result reuse; it does not prevent
-duplicate business execution by itself.
+For reads, consume `resultId` atomically. For mutations, use
+`ResultAcceptanceStore` to bind the result to one `Idempotency-Key` and exact
+request digest while the application stores and replays the business result.
+x424 prevents a different operation from reusing the human result; it does not
+make the business action idempotent by itself.
 
 ## Provider adapters
 
@@ -409,10 +428,31 @@ delegation, competence, authority, or continued control. Durable human-agent
 relationships belong in a separate consent, mandate, recovery, and revocation
 system.
 
+`x424/agent` proves possession of the bound key on the exact HTTP request and
+defaults remote agents to verifier-brokered handoff. The agent receives only a
+connector presentation and the completed signed x424 result; provider-native
+proof stays inside the verifier.
+
+```bash
+x424-agent https://api.example.test/action \
+  --verifier https://verifier.example.test \
+  --signer-command /absolute/path/to/signer \
+  --json
+```
+
+The CLI never accepts a private key argument or environment variable and
+invokes the signer executable without a shell. Resource servers must verify the
+`x424-agent` HTTP Message Signature before constructing an `agent_key` binding.
+
+The World brokered adapter uses only public IDKit APIs. Those APIs currently do
+not support reconstructing an active request after process loss, so operators
+must drain active World handoffs for restart; unexpected restart fails closed.
+This keeps the World brokered path outside the `prod-ha-0.2` gate for now.
+
 ## Repository map
 
 ```text
-src/                     Core, provider profiles, framework/managed clients, state, and MCP
+src/                     Core, agent/handoff surfaces, providers, clients, state, and MCP
 schemas/                 JSON Schema 2020-12 wire contracts
 conformance/             Fixed cross-implementation vectors
 openapi/                 OpenAPI 3.1 verifier contract

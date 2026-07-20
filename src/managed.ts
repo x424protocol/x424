@@ -7,6 +7,11 @@ import { encodeStrictBase64Url } from "./encoding.js";
 import { parseHumanRequirement } from "./schemas.js";
 import { assertTrustedHttpsUrl, isCrossOriginRedirect } from "./transport.js";
 import type {
+  HumanHandoffView,
+  StartHumanHandoffInput,
+  StartedHumanHandoff,
+} from "./handoff.js";
+import type {
   RequirementIssuanceInput,
   RequirementIssuer,
 } from "./middleware/resource.js";
@@ -14,6 +19,9 @@ import type {
   HumanRequirement,
   IsoTimestamp,
   RequirementStore,
+  ResultAcceptanceInput,
+  ResultAcceptanceStatus,
+  ResultAcceptanceStore,
   ResultReplayStore,
 } from "./types.js";
 
@@ -145,6 +153,104 @@ export class ManagedVerifierClient implements RequirementIssuer {
     return value.consumed;
   }
 
+  async acceptResult(
+    input: ResultAcceptanceInput,
+  ): Promise<ResultAcceptanceStatus> {
+    const value = await this.#requestJson(
+      `v1/results/${encodeURIComponent(input.resultId)}/acceptances`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          operationId: input.operationId,
+          requestDigest: input.requestDigest,
+          expiresAt: input.expiresAt,
+        }),
+      },
+      { expectedStatuses: [200] },
+    );
+    if (
+      !isRecord(value) ||
+      (value.status !== "new" &&
+        value.status !== "same_operation" &&
+        value.status !== "replay")
+    ) {
+      throw new Error(
+        "Managed verifier returned an invalid acceptance response",
+      );
+    }
+    return value.status;
+  }
+
+  async startHandoff(
+    input: StartHumanHandoffInput,
+  ): Promise<StartedHumanHandoff> {
+    const value = await this.#requestJson(
+      `v1/requirements/${encodeURIComponent(input.dependencyId)}/handoffs`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          nonce: input.nonce,
+          providerId: input.providerId,
+          methodId: input.methodId,
+        }),
+      },
+      { expectedStatuses: [201] },
+    );
+    if (
+      !isRecord(value) ||
+      typeof value.handoffId !== "string" ||
+      typeof value.accessToken !== "string" ||
+      value.status !== "pending" ||
+      typeof value.providerId !== "string" ||
+      typeof value.methodId !== "string" ||
+      !isRecord(value.presentation) ||
+      value.presentation.kind !== "uri" ||
+      typeof value.presentation.uri !== "string" ||
+      typeof value.expiresAt !== "string" ||
+      typeof value.pollAfterMs !== "number"
+    ) {
+      throw new Error("Managed verifier returned an invalid handoff response");
+    }
+    return value as unknown as StartedHumanHandoff;
+  }
+
+  async getHandoff(
+    handoffId: string,
+    accessToken: string,
+  ): Promise<HumanHandoffView> {
+    const value = await this.#requestJson(
+      `v1/handoffs/${encodeURIComponent(handoffId)}`,
+      {
+        method: "GET",
+        headers: { authorization: `Bearer ${accessToken}` },
+      },
+      { expectedStatuses: [200] },
+    );
+    if (
+      !isRecord(value) ||
+      typeof value.handoffId !== "string" ||
+      typeof value.status !== "string" ||
+      typeof value.expiresAt !== "string" ||
+      !["pending", "completed", "failed", "expired", "cancelled"].includes(
+        value.status,
+      )
+    ) {
+      throw new Error("Managed verifier returned an invalid handoff state");
+    }
+    return value as unknown as HumanHandoffView;
+  }
+
+  async cancelHandoff(handoffId: string, accessToken: string): Promise<void> {
+    await this.#requestJson(
+      `v1/handoffs/${encodeURIComponent(handoffId)}`,
+      {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${accessToken}` },
+      },
+      { expectedStatuses: [204], allowNotFound: true },
+    );
+  }
+
   /** Fetch authenticated signed metadata; callers verify it with pinned keys. */
   async getMetadataToken(): Promise<string> {
     const value = await this.#requestJson(
@@ -177,6 +283,12 @@ export class ManagedVerifierClient implements RequirementIssuer {
     });
   }
 
+  resultAcceptanceStore(): ResultAcceptanceStore {
+    return Object.freeze({
+      accept: (input: ResultAcceptanceInput) => this.acceptResult(input),
+    });
+  }
+
   async #requestJson(
     path: string,
     init: RequestInit,
@@ -193,6 +305,8 @@ export class ManagedVerifierClient implements RequirementIssuer {
         ? await this.#headers()
         : this.#headers;
     const headers = new Headers(configuredHeaders);
+    const requestHeaders = new Headers(init.headers);
+    for (const [key, value] of requestHeaders) headers.set(key, value);
     headers.set("accept", "application/json");
     if (init.body !== undefined)
       headers.set("content-type", "application/json");

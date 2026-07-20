@@ -16,14 +16,19 @@ describe("OpenAPI contract", () => {
     expect(Object.keys(spec.paths).sort()).toEqual([
       "/.well-known/x424-verifier",
       "/healthz",
+      "/v1/handoffs/{handoffId}",
       "/v1/requirements",
       "/v1/requirements/{dependencyId}",
+      "/v1/requirements/{dependencyId}/handoffs",
       "/v1/requirements/{dependencyId}/verify",
+      "/v1/results/{resultId}/acceptances",
       "/v1/results/{resultId}/consume",
     ]);
     expect(spec.components.schemas.HumanResult).toBeTruthy();
     expect(spec.components.schemas.RequestBodyDigestInput).toBeTruthy();
     expect(spec.components.schemas.HumanRequiredProblem).toBeTruthy();
+    expect(spec.components.schemas.HumanHandoff).toBeTruthy();
+    expect(spec.components.schemas.ResultAcceptance).toBeTruthy();
     expect(raw).toContain('"x424Transport"');
     expect(raw).toContain('"providerRequests"');
     expect(raw).not.toContain("providerSubject");

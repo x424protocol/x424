@@ -14,6 +14,7 @@ import {
 } from "../canonical.js";
 import { decodeStrictBase64Url } from "../encoding.js";
 import { HUMAN_RESULT_HEADER, humanRequiredResponse } from "../http.js";
+import type { HumanHandoffService } from "../handoff.js";
 import {
   classifyVerifierError,
   observeInternal,
@@ -29,6 +30,8 @@ import type {
   HumanBinding,
   HumanMethodRequirement,
   RequirementStore,
+  ResultAcceptanceStore,
+  ResultReplayStore,
 } from "../types.js";
 
 const MethodSchema = z
@@ -138,6 +141,26 @@ const ProofSchema = z
   })
   .strict();
 
+const ResultConsumeSchema = z
+  .object({ expiresAt: z.string().datetime() })
+  .strict();
+
+const ResultAcceptanceSchema = z
+  .object({
+    operationId: z.string().min(1).max(512),
+    requestDigest: z.string().regex(/^sha256:[A-Za-z0-9_-]{43}$/u),
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+
+const StartHandoffSchema = z
+  .object({
+    nonce: z.string().min(1).max(512),
+    providerId: z.string().regex(HUMAN_METHOD_IDENTIFIER_PATTERN),
+    methodId: z.string().regex(HUMAN_METHOD_IDENTIFIER_PATTERN),
+  })
+  .strict();
+
 export interface X424HttpRouterOptions {
   readonly service: X424Service;
   /** Verifier-generated provider material. Mutually exclusive with issuer mode. */
@@ -153,6 +176,11 @@ export interface X424HttpRouterOptions {
    */
   readonly allowIssuerProviderRequests?: boolean;
   readonly requirementStore?: RequirementStore;
+  /** Optional authenticated remote replay endpoint backing resource servers. */
+  readonly resultReplayStore?: ResultReplayStore;
+  /** Optional authenticated idempotent-mutation acceptance endpoint. */
+  readonly resultAcceptanceStore?: ResultAcceptanceStore;
+  readonly handoffService?: HumanHandoffService;
   readonly maximumPendingRequirements?: number;
   readonly issuanceAuthenticator?: IssuanceAuthenticator;
   readonly allowUnauthenticatedIssuance?: boolean;
@@ -254,6 +282,20 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   const requirementStore =
     options.requirementStore ??
     new InMemoryRequirementStore(options.maximumPendingRequirements ?? 10_000);
+
+  const authenticateStateRequest = async (request: Request): Promise<void> => {
+    if (options.issuanceAuthenticator) {
+      await options.issuanceAuthenticator.authenticate({
+        authorizationHeader: request.get("authorization") ?? null,
+      });
+    }
+  };
+
+  const handoffBearer = (request: Request): string | undefined => {
+    const authorization = request.get("authorization");
+    const match = authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/u);
+    return match?.[1];
+  };
 
   router.post(
     "/v1/requirements",
@@ -358,6 +400,207 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
     },
   );
 
+  router.get(
+    "/v1/requirements/:dependencyId",
+    async (request: Request, response: Response) => {
+      const dependencyId = request.params.dependencyId;
+      if (typeof dependencyId !== "string") {
+        return sendProblem(response, 400, "INVALID_DEPENDENCY");
+      }
+      try {
+        await authenticateStateRequest(request);
+        const requirement = await requirementStore.get(dependencyId);
+        if (!requirement) {
+          return sendProblem(response, 404, "DEPENDENCY_NOT_FOUND");
+        }
+        response.set("cache-control", "no-store, private");
+        return response.json({ requirement });
+      } catch (error) {
+        observeInternal(
+          options.onInternalError,
+          "STATE_READ_REJECTED",
+          401,
+          error,
+        );
+        return sendProblem(response, 401, "STATE_READ_REJECTED");
+      }
+    },
+  );
+
+  router.delete(
+    "/v1/requirements/:dependencyId",
+    async (request: Request, response: Response) => {
+      const dependencyId = request.params.dependencyId;
+      if (typeof dependencyId !== "string") {
+        return sendProblem(response, 400, "INVALID_DEPENDENCY");
+      }
+      try {
+        await authenticateStateRequest(request);
+        await requirementStore.delete(dependencyId);
+        response.set("cache-control", "no-store, private");
+        return response.status(204).end();
+      } catch (error) {
+        observeInternal(
+          options.onInternalError,
+          "STATE_DELETE_REJECTED",
+          401,
+          error,
+        );
+        return sendProblem(response, 401, "STATE_DELETE_REJECTED");
+      }
+    },
+  );
+
+  router.post(
+    "/v1/requirements/:dependencyId/handoffs",
+    async (request: Request, response: Response) => {
+      if (!options.handoffService) {
+        return sendProblem(response, 404, "HANDOFF_DISABLED");
+      }
+      const dependencyId = request.params.dependencyId;
+      const parsed = StartHandoffSchema.safeParse(request.body);
+      if (typeof dependencyId !== "string" || !parsed.success) {
+        return sendProblem(response, 400, "INVALID_HANDOFF");
+      }
+      try {
+        if (options.rateLimiter) {
+          const limit = await options.rateLimiter.consume(
+            `handoff:${request.ip ?? "unknown"}`,
+          );
+          if (!limit.allowed) return sendProblem(response, 429, "RATE_LIMITED");
+        }
+        const started = await options.handoffService.start({
+          dependencyId,
+          nonce: parsed.data.nonce,
+          providerId: parsed.data.providerId,
+          methodId: parsed.data.methodId,
+        });
+        response.set("cache-control", "no-store, private");
+        return response.status(201).json(started);
+      } catch (error) {
+        observeInternal(
+          options.onInternalError,
+          "HANDOFF_REJECTED",
+          400,
+          error,
+        );
+        return sendProblem(response, 400, "HANDOFF_REJECTED");
+      }
+    },
+  );
+
+  router.get(
+    "/v1/handoffs/:handoffId",
+    async (request: Request, response: Response) => {
+      if (!options.handoffService) {
+        return sendProblem(response, 404, "HANDOFF_DISABLED");
+      }
+      const handoffId = request.params.handoffId;
+      const accessToken = handoffBearer(request);
+      if (typeof handoffId !== "string" || !accessToken) {
+        return sendProblem(response, 401, "HANDOFF_UNAUTHORIZED");
+      }
+      try {
+        const view = await options.handoffService.poll(handoffId, accessToken);
+        response.set("cache-control", "no-store, private");
+        return response.json(view);
+      } catch (error) {
+        observeInternal(
+          options.onInternalError,
+          "HANDOFF_UNAUTHORIZED",
+          401,
+          error,
+        );
+        return sendProblem(response, 401, "HANDOFF_UNAUTHORIZED");
+      }
+    },
+  );
+
+  router.delete(
+    "/v1/handoffs/:handoffId",
+    async (request: Request, response: Response) => {
+      if (!options.handoffService) {
+        return sendProblem(response, 404, "HANDOFF_DISABLED");
+      }
+      const handoffId = request.params.handoffId;
+      const accessToken = handoffBearer(request);
+      if (typeof handoffId !== "string" || !accessToken) {
+        return sendProblem(response, 401, "HANDOFF_UNAUTHORIZED");
+      }
+      const cancelled = await options.handoffService.cancel(
+        handoffId,
+        accessToken,
+      );
+      if (!cancelled) return sendProblem(response, 404, "HANDOFF_NOT_FOUND");
+      response.set("cache-control", "no-store, private");
+      return response.status(204).end();
+    },
+  );
+
+  router.post(
+    "/v1/results/:resultId/consume",
+    async (request: Request, response: Response) => {
+      if (!options.resultReplayStore) {
+        return sendProblem(response, 404, "STATE_ENDPOINT_DISABLED");
+      }
+      const resultId = request.params.resultId;
+      const parsed = ResultConsumeSchema.safeParse(request.body);
+      if (typeof resultId !== "string" || !parsed.success) {
+        return sendProblem(response, 400, "INVALID_RESULT_CONSUMPTION");
+      }
+      try {
+        await authenticateStateRequest(request);
+        const consumed = await options.resultReplayStore.consume(
+          resultId,
+          parsed.data.expiresAt,
+        );
+        response.set("cache-control", "no-store, private");
+        return response.json({ consumed });
+      } catch (error) {
+        observeInternal(
+          options.onInternalError,
+          "RESULT_CONSUMPTION_REJECTED",
+          401,
+          error,
+        );
+        return sendProblem(response, 401, "RESULT_CONSUMPTION_REJECTED");
+      }
+    },
+  );
+
+  router.post(
+    "/v1/results/:resultId/acceptances",
+    async (request: Request, response: Response) => {
+      if (!options.resultAcceptanceStore) {
+        return sendProblem(response, 404, "STATE_ENDPOINT_DISABLED");
+      }
+      const resultId = request.params.resultId;
+      const parsed = ResultAcceptanceSchema.safeParse(request.body);
+      if (typeof resultId !== "string" || !parsed.success) {
+        return sendProblem(response, 400, "INVALID_RESULT_ACCEPTANCE");
+      }
+      try {
+        await authenticateStateRequest(request);
+        const status = await options.resultAcceptanceStore.accept({
+          resultId,
+          operationId: parsed.data.operationId,
+          requestDigest: parsed.data.requestDigest,
+          expiresAt: parsed.data.expiresAt,
+        });
+        response.set("cache-control", "no-store, private");
+        return response.json({ status });
+      } catch (error) {
+        observeInternal(
+          options.onInternalError,
+          "RESULT_ACCEPTANCE_REJECTED",
+          401,
+          error,
+        );
+        return sendProblem(response, 401, "RESULT_ACCEPTANCE_REJECTED");
+      }
+    },
+  );
+
   router.post(
     "/v1/requirements/:dependencyId/verify",
     async (request: Request, response: Response) => {
@@ -385,7 +628,11 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
       try {
         const proof = parseHumanProofSubmission(parsed.data);
         const satisfied = await options.service.satisfy({ requirement, proof });
-        await requirementStore.delete(requirement.dependencyId);
+        // Retain the requirement until the authenticated resource server has
+        // evaluated the signed result. The dependency nonce was consumed by
+        // satisfy(), so retaining policy state cannot re-run provider proof.
+        // Reads delete it after acceptance; mutations keep it through TTL so
+        // the same idempotent operation can cross x402 and retry safely.
         response.set(HUMAN_RESULT_HEADER, satisfied.token);
         response.set("cache-control", "no-store, private");
         // Never return native proof material; token + public result only.

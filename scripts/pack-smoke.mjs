@@ -32,7 +32,27 @@ try {
     import('x424/core').then(async (core) => {
       const digest = core.requestDigest({ method: 'GET', uri: 'https://example.test/' });
       if (!digest.startsWith('sha256:')) throw new Error('core digest failed');
+      const acceptances = new core.InMemoryResultAcceptanceStore();
+      const acceptance = {
+        resultId: 'packed-result',
+        operationId: 'packed-operation',
+        requestDigest: digest,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      };
+      if (await acceptances.accept(acceptance) !== 'new') throw new Error('acceptance create failed');
+      if (await acceptances.accept(acceptance) !== 'same_operation') throw new Error('acceptance retry failed');
+      if (await acceptances.accept({ ...acceptance, operationId: 'replay' }) !== 'replay') throw new Error('acceptance replay failed');
       await import('x424/client');
+      const agent = await import('x424/agent');
+      const { generateKeyPairSync } = await import('node:crypto');
+      const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+      const signer = agent.createEd25519AgentRequestSigner(privateKey);
+      const signed = await agent.signX424AgentRequest(new Request('https://example.test/action'), signer);
+      const binding = await agent.verifyX424AgentRequest(signed, {
+        resolveKey: agent.createEd25519AgentKeyResolver(new Map([[signer.keyId, publicKey]])),
+      });
+      if (binding.kind !== 'agent_key' || binding.value !== signer.keyId) throw new Error('packed agent signature failed');
+      await import('x424/handoff');
       await import('x424/adapters');
       await import('x424/world');
       await import('x424/fetch');

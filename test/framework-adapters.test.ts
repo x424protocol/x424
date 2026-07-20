@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryRequirementStore,
+  InMemoryResultAcceptanceStore,
   InMemoryResultReplayStore,
   defineHumanMethodDescriptor,
   defineMethodCatalog,
@@ -47,6 +48,7 @@ function options() {
     }),
     requirementStore: new InMemoryRequirementStore(),
     replayStore: new InMemoryResultReplayStore(),
+    resultAcceptanceStore: new InMemoryResultAcceptanceStore(),
     publicOrigin: { publicOrigin: "https://api.example.test" },
     requireIdempotencyKey: false,
   };

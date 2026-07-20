@@ -63,11 +63,12 @@ const x424 = createX424({
   catalog: world.catalog,
   verifier: resultKeys.verifier,
   extractBinding: async ({ headers }) => ({
-    kind: "agent_key",
-    value: headers.get("x-agent-key")!,
+    kind: "request",
+    value: headers.get("idempotency-key")!,
   }),
   requirementStore: state.requirements,
   replayStore: state.results,
+  resultAcceptanceStore: state.resultAcceptances,
   providerRequests: world.providerRequests,
   publicOrigin: { publicOrigin: "http://127.0.0.1:3000" },
 });

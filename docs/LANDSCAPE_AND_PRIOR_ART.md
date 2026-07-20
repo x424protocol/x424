@@ -116,6 +116,25 @@ x424 adds no biometric or World cryptography. It standardizes how a relying
 party asks for the exact World method, binds it to a user/agent request, hides
 the provider nullifier, and composes the result with non-World systems.
 
+### World AgentKit
+
+[World's MIT-licensed AgentKit repository at commit
+`3775f076cb15fe9783353413bd6860c94f8bdeeb`](https://github.com/worldcoin/agentkit/tree/3775f076cb15fe9783353413bd6860c94f8bdeeb)
+is credited prior art, not an x424 dependency or implementation template.
+
+> World’s AgentKit demonstrated a practical World ID-backed agent registration
+> and request-signing flow. Its terminal human handoff, wallet-possession, and
+> agent HTTP patterns informed x424’s agent-surface requirements. x424 addresses
+> a different layer: a provider-neutral HTTP dependency protocol that preserves
+> each provider’s exact claim, scope, lifecycle, and privacy boundary.
+
+x424 does not copy AgentKit code, documentation text, API layout, QR assets, or
+skill wording. Core CI and runtime contain no AgentKit package or network
+dependency. A future AgentKit/AgentBook provider method would describe
+historical enrollment plus current wallet possession rather than fresh World
+verification, and remains deferred until a separately versioned profile can
+state atomic replay, revocation, rotation, recovery, and lifecycle semantics.
+
 ### Humanity Protocol
 
 [Humanity Protocol](https://www.humanity.org/protocol) describes a

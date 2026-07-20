@@ -16,7 +16,9 @@ stores must not protect production access or value. See the public
    nonce, and time.
 4. Provider nullifiers and raw proofs never leave the adapter/verifier boundary.
 5. Pairwise IDs differ across relying-party audiences and methods.
-6. Challenge nonce and mutation result ID are atomically consumed.
+6. Challenge nonce and read-only result ID are atomically consumed. Mutations
+   atomically bind a result to one idempotency key and exact request digest;
+   only that same operation may retry.
 7. Unknown, disabled, stale, expired, malformed, wrong-audience, wrong-request,
    or wrong-binding state fails closed.
 8. Verification does not imply identity attributes, authorization, delegation,
@@ -29,34 +31,41 @@ stores must not protect production access or value. See the public
     requires one person across provider boundaries.
 12. Adopter-supplied provider request material is accepted only from an
     authenticated issuer and is adapter-validated before nonce registration.
+13. A brokered handoff exposes native provider state only inside the verifier;
+    clients receive a connector presentation and, on completion, a signed
+    x424 result.
+14. An `agent_key` binding is constructed only after successful x424-agent
+    HTTP Message Signature verification for the exact request.
 
 ## Threats and controls
 
-| Threat                              | Required control                                                     |
-| ----------------------------------- | -------------------------------------------------------------------- |
-| Forged requirement                  | TLS, trusted issuance endpoint, optional signed requirement metadata |
-| Forged result                       | Ed25519 verification with authenticated `kid` metadata               |
-| Provider/method downgrade           | exact immutable descriptor and negative tests                        |
-| Claim or assurance strengthening    | descriptor claim/non-claim and provider-local assurance comparison   |
-| Nullifier or stable-subject leakage | pairwise HMAC, log exclusion, no public result field                 |
-| Cross-RP correlation                | audience in derivation, no universal subject registry                |
-| Cross-provider duplicate person     | explicit relying-party deduplication or single-provider policy       |
-| Agent token theft                   | agent-key/sender binding, short TTL, replay consumption              |
-| Request substitution                | canonical method/URI/body digest in requirement/result               |
-| Result lifetime extension           | result window bounded by the original dependency                     |
-| Challenge replay                    | shared atomic `(dependencyId, nonce)` consumption                    |
-| Result replay                       | shared atomic `resultId` consumption plus app idempotency            |
-| Concurrent double execution         | DB/Redis uniqueness or transaction; never process-local map          |
-| Adapter lies about semantics        | conformance vectors, isolation, code review, kill switch             |
-| Provider API confusion              | pinned origin/RP/action/environment and strict response parser       |
-| Proof in logs/traces                | field-level redaction, body exclusion, bounded error messages        |
-| HMAC secret rotation split          | versioned namespace, planned overlap/cutover, uniqueness audit       |
-| Signing-key compromise              | managed/HSM key, short tokens, authenticated key rotation/revocation |
-| Chain reorganization                | per-chain finality/reorg policy; unresolved state fails closed       |
-| Backend/chain disagreement          | explicit precedence/compound policy; no optimistic fallback          |
-| Header abuse                        | 64 KiB cap, strict base64url/JSON/schema validation, no reflection   |
-| CORS/CSRF on verifier UI            | same-origin design, explicit origins, CSRF protection, user consent  |
-| SSRF through provider metadata      | fixed/allowlisted verifier origins; never fetch client URLs          |
+| Threat                              | Required control                                                      |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| Forged requirement                  | TLS, trusted issuance endpoint, optional signed requirement metadata  |
+| Forged result                       | Ed25519 verification with authenticated `kid` metadata                |
+| Provider/method downgrade           | exact immutable descriptor and negative tests                         |
+| Claim or assurance strengthening    | descriptor claim/non-claim and provider-local assurance comparison    |
+| Nullifier or stable-subject leakage | pairwise HMAC, log exclusion, no public result field                  |
+| Cross-RP correlation                | audience in derivation, no universal subject registry                 |
+| Cross-provider duplicate person     | explicit relying-party deduplication or single-provider policy        |
+| Agent token theft                   | signed exact request, agent-key binding, ≤60s signature, replay state |
+| Handoff capability theft            | random 32-byte capability, digest-only storage, short TTL, rate limit |
+| Handoff concurrent polling          | durable compare-and-swap polling claim and atomic terminal update     |
+| Request substitution                | canonical method/URI/body digest in requirement/result                |
+| Result lifetime extension           | result window bounded by the original dependency                      |
+| Challenge replay                    | shared atomic `(dependencyId, nonce)` consumption                     |
+| Result replay                       | atomic operation acceptance plus application idempotency              |
+| Concurrent double execution         | DB/Redis uniqueness or transaction; never process-local map           |
+| Adapter lies about semantics        | conformance vectors, isolation, code review, kill switch              |
+| Provider API confusion              | pinned origin/RP/action/environment and strict response parser        |
+| Proof in logs/traces                | field-level redaction, body exclusion, bounded error messages         |
+| HMAC secret rotation split          | versioned namespace, planned overlap/cutover, uniqueness audit        |
+| Signing-key compromise              | managed/HSM key, short tokens, authenticated key rotation/revocation  |
+| Chain reorganization                | per-chain finality/reorg policy; unresolved state fails closed        |
+| Backend/chain disagreement          | explicit precedence/compound policy; no optimistic fallback           |
+| Header abuse                        | 64 KiB cap, strict base64url/JSON/schema validation, no reflection    |
+| CORS/CSRF on verifier UI            | same-origin design, explicit origins, CSRF protection, user consent   |
+| SSRF through provider metadata      | fixed/allowlisted verifier origins; never fetch client URLs           |
 
 ## World ID-specific controls
 
@@ -92,6 +101,11 @@ stores must not protect production access or value. See the public
   eligible again under a reused action.
 - Do not substitute session proof/`session_id` continuity for action-scoped
   uniqueness unless a separately versioned method explicitly permits it.
+- IDKit 4.2's public request object is not reconstructible after process loss.
+  The reference brokered adapter keeps only an in-process handle, drains active
+  sessions for graceful restart, and fails closed with `WORLD_SESSION_LOST`
+  after unexpected restart. It does not use private bridge APIs. This remains
+  a blocker for the World brokered path under `prod-ha-0.2`.
 
 ## Cryptographic notes
 
@@ -112,7 +126,8 @@ use published vectors and compare byte-for-byte.
 ## Reference implementation limitations
 
 - `InMemoryNonceStore`, `InMemoryRequirementStore`, and
-  `InMemoryResultReplayStore` are single-process and lose state on restart.
+  `InMemoryResultReplayStore`, `InMemoryResultAcceptanceStore`, and
+  `InMemoryHandoffStore` are single-process and lose state on restart.
 - `RedisX424Store` and `PostgresX424Store` supply atomic shared state profiles,
   but production deployments must still secure, monitor, back up, and test
   their topology against a named deployment profile.

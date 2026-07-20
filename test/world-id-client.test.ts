@@ -16,7 +16,10 @@ import {
   createWorldIdMethodRequirements,
   createWorldIdProviderRequests,
 } from "../src/index.js";
-import { createWorldIdIdKitProofResolver } from "../src/providers/world-id-client.js";
+import {
+  createWorldIdHandoffAdapter,
+  createWorldIdIdKitProofResolver,
+} from "../src/providers/world-id-client.js";
 
 const binding = { kind: "wallet", value: "0x1234" } as const;
 
@@ -131,5 +134,42 @@ describe("World IDKit proof resolver", () => {
     await expect(
       createWorldIdIdKitProofResolver()({ requirement: requirement() }),
     ).rejects.toThrow("unaccepted human method");
+  });
+
+  it("brokers public IDKit polling without returning connector or proof state", async () => {
+    const nativeProof = {
+      protocol_version: "4.0",
+      responses: [{ identifier: "proof_of_human", proof: "private" }],
+    };
+    const pollOnce = vi
+      .fn()
+      .mockResolvedValueOnce({ type: "waiting_for_connection" })
+      .mockResolvedValueOnce({ type: "confirmed", result: nativeProof });
+    mocks.preset.mockResolvedValue({
+      connectorURI: "https://world.org/verify/brokered",
+      requestId: "world-request-1",
+      pollOnce,
+      pollUntilCompletion: vi.fn(),
+    });
+    const required = requirement();
+    const adapter = createWorldIdHandoffAdapter();
+    const started = await adapter.startHandoff({
+      requirement: required,
+      acceptedMethod: required.accepts[0]!,
+      providerRequest: required.providerRequests!["world:proof-of-human"],
+    });
+    expect(started.presentation).toEqual({
+      kind: "uri",
+      uri: "https://world.org/verify/brokered",
+    });
+    await expect(
+      adapter.pollHandoff({ providerSession: started.providerSession }),
+    ).resolves.toEqual({ status: "pending" });
+    await expect(
+      adapter.pollHandoff({ providerSession: started.providerSession }),
+    ).resolves.toEqual({ status: "completed", nativeProof });
+    await expect(
+      adapter.pollHandoff({ providerSession: started.providerSession }),
+    ).resolves.toEqual({ status: "failed", code: "WORLD_SESSION_LOST" });
   });
 });

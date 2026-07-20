@@ -18,6 +18,7 @@ services:
       X424_PROVIDER_REQUEST_MODE: verifier
       REDIS_URL: redis://redis:6379
       X424_PAIRWISE_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      X424_HANDOFF_STATE_KEY: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
       X424_EPHEMERAL_RESULT_KEY: "true"
       X424_ISSUANCE_PRINCIPALS_JSON: >-
         {"eval-token":{"subject":"sandbox","allowedPurposes":["sandbox"],"allowedAudiences":["https://api.example.test"],"allowedHttpMethods":["POST"],"allowedMethods":["world:proof-of-human"],"allowedResources":[{"origin":"https://api.example.test","pathPrefix":"/actions"}]}}
