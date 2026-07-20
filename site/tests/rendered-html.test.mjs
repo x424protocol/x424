@@ -33,7 +33,14 @@ test("server-renders the x424 landing page", async () => {
     html,
     /x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs\./,
   );
-  assert.match(html, /One explicitly accepted provider method\./);
+  assert.match(html, /x424\/0\.1 developer preview · unaudited/);
+  assert.match(html, /Use World directly for login/);
+  assert.match(
+    html,
+    /Providers prove\. x424 enforces\. Applications authorize\./,
+  );
+  assert.match(html, /pnpm quickstart/);
+  assert.match(html, /Not yet production-certified/);
   assert.match(html, /github\.com\/x424protocol\/x424/);
   assert.match(html, /424 Failed Dependency/);
   assert.match(html, /HUMAN-REQUIRED/);

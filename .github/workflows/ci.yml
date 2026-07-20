@@ -30,6 +30,9 @@ jobs:
       - name: Check
         run: pnpm check
 
+      - name: Run one-command quickstart
+        run: pnpm quickstart
+
       - name: Inspect publishable package
         run: npm pack --dry-run
 

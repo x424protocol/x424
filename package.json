@@ -17,7 +17,10 @@
     "proof-of-personhood",
     "proof-of-humanity",
     "agents",
-    "http"
+    "http",
+    "http-424",
+    "world-id",
+    "x402"
   ],
   "type": "module",
   "sideEffects": false,
@@ -113,6 +116,7 @@
     "example": "tsx examples/http-flow.ts",
     "mcp": "tsx src/mcp/cli.ts",
     "mcp:http": "X424_MCP_TRANSPORT=http tsx src/mcp/cli.ts",
+    "quickstart": "node scripts/run-quickstart.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run --dir test",
