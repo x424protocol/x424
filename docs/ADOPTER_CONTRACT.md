@@ -21,7 +21,7 @@ The x424 implementation should own:
 - provider-proof submission and strict verification;
 - request, audience, purpose, time, and caller binding;
 - private provider-subject handling and pairwise result derivation;
-- dependency and result replay controls;
+- provider-subject, dependency, and result replay controls;
 - result signing, verification, and retry; and
 - conformance tests for every public integration surface.
 

@@ -11,12 +11,18 @@ export {
   type ProviderAdapterVerify,
 } from "./provider-sdk.js";
 export {
+  WORLD_ID_LEGACY_METHOD_KEY,
+  WORLD_ID_LEGACY_ORB_METHOD,
   WORLD_ID_METHOD_KEY,
   WORLD_ID_PROOF_OF_HUMAN_METHOD,
   WorldIdAdapter,
+  createWorldIdLegacyMethodRequirement,
   createWorldIdMethodRequirement,
+  createWorldIdMethodRequirements,
   createWorldIdProofResolver,
   createWorldIdProviderRequest,
+  createWorldIdProviderRequests,
+  createWorldIdVerifierProfile,
   worldIdProviderRequestFromRequirement,
   type CreateWorldIdProviderRequestOptions,
   type WorldIdAdapterOptions,
@@ -24,4 +30,6 @@ export {
   type WorldIdProviderRequest,
   type WorldIdRemoteVerifier,
   type WorldIdRpContext,
+  type WorldIdVerifierProfile,
+  type WorldIdVerifierProfileOptions,
 } from "./providers/world-id.js";

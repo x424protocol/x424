@@ -104,6 +104,15 @@ describe("Redis x424 state", () => {
       state.results.consume("result-1", required.expiresAt),
     ).resolves.toBe(false);
 
+    const providerEntry = {
+      providerId: "world",
+      methodId: "proof-of-human",
+      uniquenessScope: { kind: "action", id: "world:rp:action" },
+      subjectDigest: "hmac-sha256:private-digest",
+    } as const;
+    await expect(state.providers.consume(providerEntry)).resolves.toBe(true);
+    await expect(state.providers.consume(providerEntry)).resolves.toBe(false);
+
     await state.requirements.delete(required.dependencyId);
     await expect(
       state.requirements.get(required.dependencyId),

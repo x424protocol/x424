@@ -4,6 +4,8 @@ import type {
   HumanRequirement,
   IsoTimestamp,
   NonceStore,
+  ProviderReplayEntry,
+  ProviderReplayStore,
   RequirementStore,
   ResultReplayStore,
 } from "./types.js";
@@ -38,6 +40,7 @@ export class RedisX424Store {
   readonly #client: RedisCommandClient;
   readonly #prefix: string;
   readonly nonces: NonceStore;
+  readonly providers: ProviderReplayStore;
   readonly requirements: RequirementStore;
   readonly results: ResultReplayStore;
 
@@ -53,6 +56,9 @@ export class RedisX424Store {
         this.#putNonce(dependencyId, nonce, expiresAt),
       consume: (dependencyId: string, nonce: string) =>
         this.#consumeNonce(dependencyId, nonce),
+    });
+    this.providers = Object.freeze({
+      consume: (entry: ProviderReplayEntry) => this.#consumeProvider(entry),
     });
     this.requirements = Object.freeze({
       put: (requirement: HumanRequirement) => this.#putRequirement(requirement),
@@ -89,6 +95,33 @@ export class RedisX424Store {
       nonce,
     ]);
     return response === 1 || response === "1";
+  }
+
+  async #consumeProvider(entry: ProviderReplayEntry): Promise<boolean> {
+    if (
+      !entry.providerId ||
+      !entry.methodId ||
+      !entry.uniquenessScope.id ||
+      !entry.subjectDigest
+    ) {
+      return false;
+    }
+    const response = await this.#client.sendCommand([
+      "SET",
+      this.#key(
+        "provider",
+        [
+          entry.providerId,
+          entry.methodId,
+          entry.uniquenessScope.kind,
+          entry.uniquenessScope.id,
+          entry.subjectDigest,
+        ].join(":"),
+      ),
+      "1",
+      "NX",
+    ]);
+    return response === "OK";
   }
 
   async #putRequirement(requirement: HumanRequirement): Promise<void> {
@@ -168,7 +201,10 @@ export class RedisX424Store {
       : undefined;
   }
 
-  #key(kind: "nonce" | "requirement" | "result", id: string): string {
+  #key(
+    kind: "nonce" | "provider" | "requirement" | "result",
+    id: string,
+  ): string {
     if (!id) throw new Error("x424 store ID is required");
     return `${this.#prefix}:${kind}:${id}`;
   }

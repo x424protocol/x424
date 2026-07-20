@@ -96,6 +96,8 @@ export interface ProviderVerifiedHuman {
   readonly providerSubject: string;
   readonly uniquenessScope: UniquenessScope;
   readonly verificationMode: VerificationMode;
+  /** Request verifier-side subject retention when the provider does not. */
+  readonly providerReplayMode?: "provider" | "verifier";
   readonly proofDigest: string;
   readonly verifiedAt: IsoTimestamp;
   readonly expiresAt?: IsoTimestamp;
@@ -180,6 +182,19 @@ export interface NonceStore {
     nonce: string,
     expiresAt: IsoTimestamp,
   ): Promise<void>;
+}
+
+export interface ProviderReplayEntry {
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly uniquenessScope: UniquenessScope;
+  /** SHA-256 digest; stores never receive the provider's raw subject. */
+  readonly subjectDigest: string;
+}
+
+export interface ProviderReplayStore {
+  /** Atomically retain one provider subject. False means already consumed. */
+  consume(entry: ProviderReplayEntry): Promise<boolean>;
 }
 
 /**

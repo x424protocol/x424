@@ -59,7 +59,8 @@ production access or value.
 
 - Generate RP request signatures only on the backend. Never expose the RP
   signing key to a browser, public environment variable, log, or MCP tool.
-- Forward the exact IDKit result to World's current v4 verifier; do not trim,
+- Forward the exact IDKit result to World's `/api/v4/verify/{rp_id}` endpoint,
+  which verifies current v4 and accepted legacy v3 results; do not trim,
   convert, or rebuild native proof fields.
 - Validate protocol version, environment, RP/action, credential identifier,
   nonce, and the exact application signal/binding before accepting remote
@@ -67,11 +68,16 @@ production access or value.
 - The reference adapter binds the World signal to the x424 binding. Applications
   may add a `validateBinding` callback for stricter session or account policy;
   the callback never weakens the built-in check.
-- Reject legacy credentials in the current Proof of Human profile. World v3
-  and v4 credentials can have different nullifiers, so accepting both under one
-  method can violate one-human-one-action semantics.
-- Store uniqueness material using canonical representation and atomic unique
-  constraints where the provider method requires replay detection.
+- Treat `world:proof-of-human@1` and `world:orb-legacy@1` as separate methods
+  even though IDKit can return either from one ceremony. Require explicit
+  legacy enablement in the requirement, trusted provider request, and verifier.
+- Require the exact x424 signal hash in both v4 and legacy proof responses.
+  Missing or wrong legacy signal binding fails closed before remote verification.
+- Never claim that v3 and v4 nullifiers identify the same human. Accepting both
+  in one long-lived application namespace requires an application-owned
+  cross-version policy; the reference profile does not infer one.
+- Atomically retain the provider replay digest before issuing a result. The
+  Redis store receives an HMAC digest, not the raw nullifier.
 - World ID 4 uniqueness nullifiers are one-time. Local deletion cannot be
   assumed to reset provider eligibility; recovery must preserve or explicitly
   migrate the relying-party human namespace.

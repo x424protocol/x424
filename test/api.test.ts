@@ -4,12 +4,10 @@ import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   InMemoryNonceStore,
-  WorldIdAdapter,
+  InMemoryProviderReplayStore,
   X424Service,
-  createWorldIdMethodRequirement,
-  createWorldIdProviderRequest,
+  createWorldIdVerifierProfile,
   createX424HttpRouter,
-  defineMethodCatalog,
   generatePairwiseSecret,
   generateResultKeyPair,
   worldIdProviderRequestFromRequirement,
@@ -22,10 +20,13 @@ describe("reference HTTP API", () => {
   afterEach(() => servers.splice(0).forEach((server) => server.close()));
 
   it("issues, verifies, and returns a private signed result", async () => {
-    const adapter = new WorldIdAdapter({
+    const profile = createWorldIdVerifierProfile({
+      appId: "app_test",
       rpId: "rp_test",
       action: "x424-test",
       environment: "staging",
+      signingKeyHex: `0x${"ab".repeat(32)}`,
+      allowLegacyProofs: true,
       verifyRemote: async () => ({
         success: true,
         action: "x424-test",
@@ -41,9 +42,10 @@ describe("reference HTTP API", () => {
       }),
     });
     const service = new X424Service({
-      catalog: defineMethodCatalog(adapter.methods()),
-      adapters: [adapter],
+      catalog: profile.catalog,
+      adapters: [profile.adapter],
       nonceStore: new InMemoryNonceStore(),
+      providerReplayStore: new InMemoryProviderReplayStore(),
       pairwiseSecret: generatePairwiseSecret(),
       resultSigner: generateResultKeyPair().signer,
     });
@@ -52,17 +54,7 @@ describe("reference HTTP API", () => {
     app.use(
       createX424HttpRouter({
         service,
-        providerRequests: async ({ binding, ttlSeconds }) => ({
-          "world:proof-of-human": createWorldIdProviderRequest({
-            appId: "app_test",
-            rpId: "rp_test",
-            action: "x424-test",
-            environment: "staging",
-            signingKeyHex: `0x${"ab".repeat(32)}`,
-            binding,
-            ttlSeconds,
-          }),
-        }),
+        providerRequests: profile.providerRequests,
       }),
     );
     const server = app.listen(0, "127.0.0.1");
@@ -80,7 +72,7 @@ describe("reference HTTP API", () => {
         uri: "https://api.example.test/action",
         audience: "https://api.example.test",
         binding: { kind: "agent_key", value: "sha256:test" },
-        accepts: [createWorldIdMethodRequirement()],
+        accepts: profile.accepts,
       }),
     });
     expect(created.status).toBe(201);
@@ -113,6 +105,9 @@ describe("reference HTTP API", () => {
                 identifier: "proof_of_human",
                 signal_hash: providerRequest.signalHash,
                 proof: ["opaque"],
+                nullifier: "0xnever-public",
+                issuer_schema_id: 1,
+                expires_at_min: 1_800_000_000,
               },
             ],
           },

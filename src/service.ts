@@ -9,6 +9,7 @@ import type {
   HumanRequirement,
   HumanResult,
   NonceStore,
+  ProviderReplayStore,
   ProviderVerifiedHuman,
 } from "./types.js";
 import { X424_VERSION } from "./types.js";
@@ -21,6 +22,8 @@ export interface X424ServiceOptions {
   readonly catalog: ReadonlyMap<string, HumanMethodDescriptor>;
   readonly adapters: readonly HumanProviderAdapter[];
   readonly nonceStore: NonceStore;
+  /** Used only by adapters that return providerReplayMode: "verifier". */
+  readonly providerReplayStore: ProviderReplayStore;
   readonly pairwiseSecret: Uint8Array;
   readonly resultSigner: ResultSigner;
   readonly maximumResultTtlSeconds?: number;
@@ -40,6 +43,9 @@ function assertVerifiedOutput(
     verified.descriptorVersion !== descriptor.version ||
     !descriptor.nativeScopeKinds.includes(verified.uniquenessScope.kind) ||
     !descriptor.verificationModes.includes(verified.verificationMode) ||
+    (verified.providerReplayMode !== undefined &&
+      verified.providerReplayMode !== "provider" &&
+      verified.providerReplayMode !== "verifier") ||
     !verified.providerSubject ||
     !verified.proofDigest
   ) {
@@ -168,6 +174,23 @@ export class X424Service {
     const issuedAt = this.#now();
     assertRequirementCurrent(requirement, issuedAt);
     assertVerifiedOutput(verified, requirement, proof, descriptor, issuedAt);
+    if (verified.providerReplayMode === "verifier") {
+      const subjectDigest = createHmac("sha256", this.#options.pairwiseSecret)
+        .update(
+          `provider-replay\u0000${verified.providerId}\u0000${verified.methodId}\u0000${verified.uniquenessScope.kind}\u0000${verified.uniquenessScope.id}\u0000${verified.providerSubject}`,
+        )
+        .digest("base64url");
+      if (
+        !(await this.#options.providerReplayStore.consume({
+          providerId: verified.providerId,
+          methodId: verified.methodId,
+          uniquenessScope: verified.uniquenessScope,
+          subjectDigest: `hmac-sha256:${subjectDigest}`,
+        }))
+      ) {
+        throw new Error("Provider uniqueness subject was already consumed");
+      }
+    }
 
     const expiresAtMs = Math.min(
       Date.parse(requirement.expiresAt),
