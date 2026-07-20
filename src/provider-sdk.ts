@@ -6,10 +6,13 @@ import type {
 } from "./types.js";
 
 export type ProviderAdapterVerify = HumanProviderAdapter["verify"];
+export type ProviderAdapterValidateProviderRequest =
+  HumanProviderAdapter["validateProviderRequest"];
 
 export interface HumanProviderAdapterDefinition {
   readonly providerId: string;
   readonly methods: readonly HumanMethodDescriptor[];
+  readonly validateProviderRequest: ProviderAdapterValidateProviderRequest;
   readonly verify: ProviderAdapterVerify;
 }
 
@@ -67,6 +70,12 @@ export function inspectHumanProviderAdapter(
       code: "PROVIDER_ID_INVALID",
       detail:
         "Adapter providerId must use lowercase protocol identifier syntax",
+    });
+  }
+  if (typeof adapter.validateProviderRequest !== "function") {
+    issues.push({
+      code: "ADAPTER_INVALID",
+      detail: "Adapter must validate provider request material",
     });
   }
 
@@ -134,6 +143,9 @@ export function defineHumanProviderAdapter(
   const adapter: HumanProviderAdapter = Object.freeze({
     providerId: definition.providerId,
     methods: () => methods,
+    validateProviderRequest: async (
+      input: Parameters<ProviderAdapterValidateProviderRequest>[0],
+    ): Promise<void> => definition.validateProviderRequest(input),
     verify: async (
       input: Parameters<ProviderAdapterVerify>[0],
     ): Promise<ProviderVerifiedHuman> => definition.verify(input),

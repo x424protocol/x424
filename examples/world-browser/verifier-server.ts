@@ -29,6 +29,7 @@ const catalog = defineMethodCatalog([WORLD_ID_PROOF_OF_HUMAN_METHOD]);
 const fakeWorldAdapter: HumanProviderAdapter = {
   providerId: "world",
   methods: () => [WORLD_ID_PROOF_OF_HUMAN_METHOD],
+  validateProviderRequest: () => undefined,
   async verify({ requirement, proof }): Promise<ProviderVerifiedHuman> {
     if (proof.methodId !== "proof-of-human") {
       throw new Error("Legacy and unknown methods are rejected");

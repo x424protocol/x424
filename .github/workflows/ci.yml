@@ -33,6 +33,9 @@ jobs:
       - name: Inspect publishable package
         run: npm pack --dry-run
 
+      - name: Build self-hosted verifier image
+        run: docker build -f deploy/verifier/Dockerfile -t x424-verifier:ci .
+
       - name: Install website dependencies
         working-directory: site
         run: npm ci

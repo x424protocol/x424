@@ -1,7 +1,7 @@
 {
   "name": "x424",
   "version": "0.1.0",
-  "description": "HTTP-native unique-human dependencies for users, agents, and APIs.",
+  "description": "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs.",
   "license": "Apache-2.0",
   "homepage": "https://x424.org",
   "repository": {
@@ -36,11 +36,31 @@
       "types": "./dist/client.d.ts",
       "import": "./dist/client.js"
     },
+    "./fetch": {
+      "types": "./dist/fetch.d.ts",
+      "import": "./dist/fetch.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js"
+    },
+    "./managed": {
+      "types": "./dist/managed.d.ts",
+      "import": "./dist/managed.js"
+    },
+    "./x402": {
+      "types": "./dist/x402.d.ts",
+      "import": "./dist/x402.js"
+    },
     "./adapters": {
       "types": "./dist/adapters.d.ts",
       "import": "./dist/adapters.js"
     },
     "./providers/world-id": {
+      "types": "./dist/providers/world-id.d.ts",
+      "import": "./dist/providers/world-id.js"
+    },
+    "./world": {
       "types": "./dist/providers/world-id.d.ts",
       "import": "./dist/providers/world-id.js"
     },
@@ -53,8 +73,8 @@
       "import": "./dist/redis.js"
     },
     "./express": {
-      "types": "./dist/api/router.d.ts",
-      "import": "./dist/api/router.js"
+      "types": "./dist/express.d.ts",
+      "import": "./dist/express.js"
     },
     "./middleware": {
       "types": "./dist/middleware/resource.d.ts",
@@ -77,7 +97,9 @@
     "dist",
     "conformance",
     "demo",
+    "deploy",
     "docs",
+    "examples",
     "CHANGELOG.md",
     "openapi",
     "schemas",
@@ -94,6 +116,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run --dir test",
+    "test:adopter-contract": "vitest run test/core.test.ts test/api.test.ts test/client.test.ts test/middleware.test.ts test/world-provider-request-conformance.test.ts test/security-regressions.test.ts",
     "release:check": "pnpm check && npm pack --dry-run",
     "pack:smoke": "node scripts/pack-smoke.mjs",
     "prepack": "pnpm build",
@@ -111,17 +134,22 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@worldcoin/idkit-core": "^4.2.2",
     "express": "^5.2.1",
+    "redis": "^6.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
+    "@x402/core": "^2.19.0",
+    "@x402/evm": "^2.19.0",
+    "@x402/express": "^2.19.0",
+    "@x402/fetch": "^2.19.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "prettier": "^3.6.0",
-    "redis": "^6.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.0",
+    "viem": "^2.55.4",
     "vitest": "^4.0.0"
   }
 }

@@ -28,6 +28,18 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ### Added
 
+- A focused `test:adopter-contract` command for automated adopter compatibility
+  gates covering valid World verification, request binding, replay rejection,
+  provider-request policy, privacy, and public HTTP behavior.
+- High-level `createX424()` and `worldProofOfHuman()` entry points plus stable
+  Fetch, Express, Next.js, managed-verifier, World, and x402 package subpaths.
+- Authenticated `ManagedVerifierClient` with remote issuance, retained
+  requirement, and atomic result-consumption adapters.
+- Deterministic x424-before-x402 server/client composition with three-request
+  body replay controls and separate human/payment proof headers.
+- Runnable non-root Redis verifier image, shared Redis rate limiter, production
+  external signer/deriver boundary, Compose sandbox, and Helm templates.
+
 - Program baseline controls under `docs/program/` (severity policy, deployment
   profiles, conflict governance, threat/data-flow, requirement IDs, deliverable
   register, external engagement packages).
@@ -63,6 +75,12 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 - Provenance-enabled npm release workflow with packed-package smoke tests.
 
 ### Changed
+
+- Authenticated issuance can use exactly one provider-request source:
+  verifier-generated or adopter-supplied signed material validated by the
+  provider adapter before nonce registration.
+- PostgreSQL requirement/nonce insertion now rejects duplicate dependency IDs,
+  and provider replay keys include provider, method, scope, and private digest.
 
 - Updated the reference World profile to preserve current Proof of Human and
   legacy Orb as separate immutable method outcomes.

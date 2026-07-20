@@ -1,7 +1,16 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { methodKey } from "./catalog.js";
+import {
+  createLocalPairwiseDeriver,
+  type ExternalPairwiseDeriver,
+} from "./keys/managed.js";
 import { assertHumanProviderAdapterConformance } from "./provider-sdk.js";
-import { signHumanResult, type ResultSigner } from "./result-token.js";
+import {
+  signHumanResult,
+  signHumanResultWithExternal,
+  type ExternalResultSignFn,
+  type ResultSigner,
+} from "./result-token.js";
 import type {
   HumanMethodDescriptor,
   HumanProofSubmission,
@@ -24,8 +33,10 @@ export interface X424ServiceOptions {
   readonly nonceStore: NonceStore;
   /** Used only by adapters that return providerReplayMode: "verifier". */
   readonly providerReplayStore: ProviderReplayStore;
-  readonly pairwiseSecret: Uint8Array;
-  readonly resultSigner: ResultSigner;
+  /** Development/evaluation only. Use pairwiseDeriver in production. */
+  readonly pairwiseSecret?: Uint8Array;
+  readonly pairwiseDeriver?: ExternalPairwiseDeriver;
+  readonly resultSigner: ResultSigner | ExternalResultSignFn;
   readonly maximumResultTtlSeconds?: number;
   readonly now?: () => Date;
 }
@@ -87,11 +98,20 @@ function assertVerifiedOutput(
 export class X424Service {
   readonly #options: X424ServiceOptions;
   readonly #adapters: ReadonlyMap<string, HumanProviderAdapter>;
+  readonly #pairwiseDeriver: ExternalPairwiseDeriver;
 
   constructor(options: X424ServiceOptions) {
-    if (options.pairwiseSecret.byteLength < 32) {
-      throw new Error("pairwiseSecret must contain at least 32 random bytes");
+    if (
+      (options.pairwiseSecret === undefined) ===
+      (options.pairwiseDeriver === undefined)
+    ) {
+      throw new Error(
+        "Configure exactly one pairwise derivation source: secret or deriver",
+      );
     }
+    this.#pairwiseDeriver = options.pairwiseDeriver
+      ? options.pairwiseDeriver
+      : createLocalPairwiseDeriver(options.pairwiseSecret!);
     const providerIds = new Set<string>();
     const installedMethods = new Set<string>();
     for (const adapter of options.adapters) {
@@ -124,6 +144,41 @@ export class X424Service {
 
   async register(requirement: HumanRequirement): Promise<void> {
     assertRequirementCurrent(requirement, this.#now());
+    const acceptedKeys = new Set(
+      requirement.accepts.map((accepted) =>
+        methodKey(accepted.providerId, accepted.methodId),
+      ),
+    );
+    for (const key of Object.keys(requirement.providerRequests ?? {})) {
+      if (!acceptedKeys.has(key)) {
+        throw new Error(
+          `Provider request material names an unaccepted method: ${key}`,
+        );
+      }
+    }
+    for (const acceptedMethod of requirement.accepts) {
+      const key = methodKey(acceptedMethod.providerId, acceptedMethod.methodId);
+      const descriptor = this.#options.catalog.get(key);
+      if (!descriptor || descriptor.status !== "enabled") {
+        throw new Error(`Human method is unknown or disabled: ${key}`);
+      }
+      if (descriptor.version !== acceptedMethod.descriptorVersion) {
+        throw new Error(
+          `Human method descriptor version does not match: ${key}`,
+        );
+      }
+      const adapter = this.#adapters.get(acceptedMethod.providerId);
+      if (!adapter) {
+        throw new Error(
+          `No adapter for provider: ${acceptedMethod.providerId}`,
+        );
+      }
+      await adapter.validateProviderRequest({
+        requirement,
+        acceptedMethod,
+        providerRequest: requirement.providerRequests?.[key],
+      });
+    }
     await this.#options.nonceStore.put(
       requirement.dependencyId,
       requirement.nonce,
@@ -175,17 +230,23 @@ export class X424Service {
     assertRequirementCurrent(requirement, issuedAt);
     assertVerifiedOutput(verified, requirement, proof, descriptor, issuedAt);
     if (verified.providerReplayMode === "verifier") {
-      const subjectDigest = createHmac("sha256", this.#options.pairwiseSecret)
-        .update(
-          `provider-replay\u0000${verified.providerId}\u0000${verified.methodId}\u0000${verified.uniquenessScope.kind}\u0000${verified.uniquenessScope.id}\u0000${verified.providerSubject}`,
-        )
-        .digest("base64url");
+      const subjectDigest =
+        await this.#pairwiseDeriver.deriveProviderReplayDigest({
+          providerId: verified.providerId,
+          methodId: verified.methodId,
+          scopeKind: verified.uniquenessScope.kind,
+          scopeId: verified.uniquenessScope.id,
+          providerSubject: verified.providerSubject,
+        });
+      if (!/^hmac-sha256:[A-Za-z0-9_-]{43}$/u.test(subjectDigest)) {
+        throw new Error("Pairwise deriver returned an invalid replay digest");
+      }
       if (
         !(await this.#options.providerReplayStore.consume({
           providerId: verified.providerId,
           methodId: verified.methodId,
           uniquenessScope: verified.uniquenessScope,
-          subjectDigest: `hmac-sha256:${subjectDigest}`,
+          subjectDigest,
         }))
       ) {
         throw new Error("Provider uniqueness subject was already consumed");
@@ -200,12 +261,18 @@ export class X424Service {
       issuedAt.getTime() +
         (this.#options.maximumResultTtlSeconds ?? 300) * 1_000,
     );
-    const pairwiseHumanId = this.#pairwiseId(
-      requirement.resource.audience,
-      verified.providerId,
-      verified.methodId,
-      verified.providerSubject,
-    );
+    const pairwiseHumanId = await this.#pairwiseDeriver.derivePairwiseHumanId({
+      audience: requirement.resource.audience,
+      providerId: verified.providerId,
+      methodId: verified.methodId,
+      providerSubject: verified.providerSubject,
+    });
+    if (
+      !pairwiseHumanId.startsWith("x424_human_") ||
+      pairwiseHumanId.length > 512
+    ) {
+      throw new Error("Pairwise deriver returned an invalid identifier");
+    }
     const result: HumanResult = {
       x424Version: X424_VERSION,
       resultId: `x424_result_${randomUUID()}`,
@@ -234,28 +301,18 @@ export class X424Service {
         ? { stateReferences: verified.stateReferences }
         : {}),
     };
+    const token =
+      "sign" in this.#options.resultSigner
+        ? await signHumanResultWithExternal(result, this.#options.resultSigner)
+        : signHumanResult(result, this.#options.resultSigner);
     return {
       result,
-      token: signHumanResult(result, this.#options.resultSigner),
+      token,
     };
   }
 
   #now(): Date {
     return this.#options.now?.() ?? new Date();
-  }
-
-  #pairwiseId(
-    audience: string,
-    providerId: string,
-    methodId: string,
-    providerSubject: string,
-  ): string {
-    const digest = createHmac("sha256", this.#options.pairwiseSecret)
-      .update(
-        `${audience}\u0000${providerId}\u0000${methodId}\u0000${providerSubject}`,
-      )
-      .digest("base64url");
-    return `x424_human_${digest}`;
   }
 }
 

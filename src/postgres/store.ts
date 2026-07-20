@@ -3,7 +3,7 @@
  * Adopters inject a minimal query client; x424 does not bundle a driver.
  */
 
-import { canonicalJson } from "../canonical.js";
+import { canonicalJson, sha256 } from "../canonical.js";
 import { parseHumanRequirement } from "../schemas.js";
 import type {
   HumanRequirement,
@@ -101,13 +101,16 @@ export class PostgresX424Store {
     expiresAt: IsoTimestamp,
   ): Promise<void> {
     if (!nonce) throw new Error("Invalid nonce entry");
-    await this.#client.query(
+    const result = await this.#client.query(
       `INSERT INTO x424_nonces (dependency_id, nonce, expires_at)
        VALUES ($1, $2, $3::timestamptz)
-       ON CONFLICT (dependency_id) DO UPDATE
-       SET nonce = EXCLUDED.nonce, expires_at = EXCLUDED.expires_at`,
+       ON CONFLICT (dependency_id) DO NOTHING
+       RETURNING dependency_id`,
       [dependencyId, nonce, expiresAt],
     );
+    if ((result.rowCount ?? 0) === 0) {
+      throw new Error("Dependency ID already exists");
+    }
   }
 
   async #consumeNonce(dependencyId: string, nonce: string): Promise<boolean> {
@@ -121,17 +124,20 @@ export class PostgresX424Store {
   }
 
   async #putRequirement(requirement: HumanRequirement): Promise<void> {
-    await this.#client.query(
+    const result = await this.#client.query(
       `INSERT INTO x424_requirements (dependency_id, document, expires_at)
        VALUES ($1, $2::jsonb, $3::timestamptz)
-       ON CONFLICT (dependency_id) DO UPDATE
-       SET document = EXCLUDED.document, expires_at = EXCLUDED.expires_at`,
+       ON CONFLICT (dependency_id) DO NOTHING
+       RETURNING dependency_id`,
       [
         requirement.dependencyId,
         canonicalJson(requirement),
         requirement.expiresAt,
       ],
     );
+    if ((result.rowCount ?? 0) === 0) {
+      throw new Error("Dependency ID already exists");
+    }
   }
 
   async #getRequirement(
@@ -168,7 +174,17 @@ export class PostgresX424Store {
        VALUES ($1, NOW() + INTERVAL '365 days')
        ON CONFLICT (digest) DO NOTHING
        RETURNING digest`,
-      [entry.subjectDigest],
+      [
+        sha256(
+          [
+            entry.providerId,
+            entry.methodId,
+            entry.uniquenessScope.kind,
+            entry.uniquenessScope.id,
+            entry.subjectDigest,
+          ].join("\u0000"),
+        ),
+      ],
     );
     void ttlSeconds;
     return (result.rowCount ?? 0) > 0;

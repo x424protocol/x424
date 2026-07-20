@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { RedisClientType } from "redis";
 import { createHumanRequirement } from "../src/core.js";
-import { RedisX424Store, type RedisCommandClient } from "../src/redis.js";
+import {
+  RedisRateLimiter,
+  RedisX424Store,
+  type RedisCommandClient,
+} from "../src/redis.js";
 
 class FakeRedisClient implements RedisCommandClient {
   readonly values = new Map<
     string,
     { readonly value: string; readonly expiresAtMs?: number }
   >();
+  readonly rateHits = new Map<string, number>();
 
   async sendCommand(arguments_: readonly string[]): Promise<unknown> {
     const [command, key] = arguments_;
@@ -33,6 +38,11 @@ class FakeRedisClient implements RedisCommandClient {
     if (command === "EVAL") {
       const nonceKey = arguments_[3]!;
       const expectedNonce = arguments_[4]!;
+      if (nonceKey.startsWith("test-rate:")) {
+        const current = (this.rateHits.get(nonceKey) ?? 0) + 1;
+        this.rateHits.set(nonceKey, current);
+        return [current, Number(expectedNonce)];
+      }
       this.#expire(nonceKey);
       if (this.values.get(nonceKey)?.value !== expectedNonce) return 0;
       this.values.delete(nonceKey);
@@ -117,5 +127,26 @@ describe("Redis x424 state", () => {
     await expect(
       state.requirements.get(required.dependencyId),
     ).resolves.toBeUndefined();
+  });
+
+  it("shares rate limits through Redis", async () => {
+    const limiter = new RedisRateLimiter({
+      client: new FakeRedisClient(),
+      keyPrefix: "test-rate",
+      windowMs: 60_000,
+      maxRequests: 2,
+    });
+    await expect(limiter.consume("issue:client")).resolves.toMatchObject({
+      allowed: true,
+      remaining: 1,
+    });
+    await expect(limiter.consume("issue:client")).resolves.toMatchObject({
+      allowed: true,
+      remaining: 0,
+    });
+    await expect(limiter.consume("issue:client")).resolves.toMatchObject({
+      allowed: false,
+      remaining: 0,
+    });
   });
 });

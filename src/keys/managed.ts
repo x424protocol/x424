@@ -29,6 +29,61 @@ export interface ExternalResultSigner {
   sign(signingInput: Uint8Array): Promise<Uint8Array> | Uint8Array;
 }
 
+/** Non-exportable pairwise HMAC boundary for KMS/HSM-backed deployments. */
+export interface ExternalPairwiseDeriver {
+  derivePairwiseHumanId(input: {
+    readonly audience: string;
+    readonly providerId: string;
+    readonly methodId: string;
+    readonly providerSubject: string;
+  }): Promise<string> | string;
+  deriveProviderReplayDigest(input: {
+    readonly providerId: string;
+    readonly methodId: string;
+    readonly scopeKind: string;
+    readonly scopeId: string;
+    readonly providerSubject: string;
+  }): Promise<string> | string;
+}
+
+/** Local key material for development/evaluation. Production uses an HSM adapter. */
+export function createLocalPairwiseDeriver(
+  secret: Uint8Array,
+): ExternalPairwiseDeriver {
+  if (secret.byteLength < 32) {
+    throw new Error("Pairwise secret must contain at least 32 random bytes");
+  }
+  const hmac = (domain: string, values: readonly string[]) =>
+    createHmac("sha256", secret)
+      .update([domain, ...values].join("\u0000"))
+      .digest("base64url");
+  const deriver: ExternalPairwiseDeriver = {
+    derivePairwiseHumanId(input) {
+      const digest = createHmac("sha256", secret)
+        .update(
+          [
+            input.audience,
+            input.providerId,
+            input.methodId,
+            input.providerSubject,
+          ].join("\u0000"),
+        )
+        .digest("base64url");
+      return `x424_human_${digest}`;
+    },
+    deriveProviderReplayDigest(input) {
+      return `hmac-sha256:${hmac("provider-replay", [
+        input.providerId,
+        input.methodId,
+        input.scopeKind,
+        input.scopeId,
+        input.providerSubject,
+      ])}`;
+    },
+  };
+  return Object.freeze(deriver);
+}
+
 export interface PairwiseSecretVersion {
   readonly version: string;
   readonly status: KeyLifecycleStatus;

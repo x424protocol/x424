@@ -82,6 +82,9 @@ const CreateSchema = z
       })
       .strict(),
     accepts: z.array(MethodSchema).min(1).max(10),
+    providerRequests: z
+      .record(z.string().min(3).max(201), z.unknown())
+      .optional(),
     ttlSeconds: z.number().int().min(30).max(900).default(300),
   })
   .strict();
@@ -137,22 +140,34 @@ const ProofSchema = z
 
 export interface X424HttpRouterOptions {
   readonly service: X424Service;
-  readonly providerRequests: (input: {
+  /** Verifier-generated provider material. Mutually exclusive with issuer mode. */
+  readonly providerRequests?: (input: {
     readonly purpose: string;
     readonly binding: HumanBinding;
     readonly accepts: readonly HumanMethodRequirement[];
     readonly ttlSeconds: number;
   }) => Promise<Readonly<Record<string, unknown>>>;
+  /**
+   * Accept authenticated issuer-supplied provider material. Adapter validation
+   * still runs before the dependency nonce is registered.
+   */
+  readonly allowIssuerProviderRequests?: boolean;
   readonly requirementStore?: RequirementStore;
   readonly maximumPendingRequirements?: number;
   readonly issuanceAuthenticator?: IssuanceAuthenticator;
   readonly allowUnauthenticatedIssuance?: boolean;
   readonly rateLimiter?: {
-    consume(key: string): {
-      allowed: boolean;
-      remaining: number;
-      resetAt: number;
-    };
+    consume(key: string):
+      | {
+          allowed: boolean;
+          remaining: number;
+          resetAt: number;
+        }
+      | Promise<{
+          allowed: boolean;
+          remaining: number;
+          resetAt: number;
+        }>;
   };
   /** Readiness check for durable state and verifier dependencies. Required outside dev-local. */
   readonly readinessCheck?: () => void | Promise<void>;
@@ -197,6 +212,14 @@ function sendProblem(
  * Reference API router. Construction fails closed for misconfigured profiles.
  */
 export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
+  if (
+    (options.providerRequests === undefined) ===
+    (options.allowIssuerProviderRequests !== true)
+  ) {
+    throw new Error(
+      "Configure exactly one provider-request source: verifier or issuer",
+    );
+  }
   const profile = assertIssuanceRouterConfig({
     deploymentProfile: options.deploymentProfile,
     ...(options.allowUnauthenticatedIssuance === undefined
@@ -237,7 +260,7 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
     async (request: Request, response: Response) => {
       if (options.rateLimiter) {
         const key = request.ip ?? "unknown";
-        const limit = options.rateLimiter.consume(`issue:${key}`);
+        const limit = await options.rateLimiter.consume(`issue:${key}`);
         response.setHeader("x-ratelimit-remaining", String(limit.remaining));
         if (!limit.allowed) {
           response.setHeader("retry-after", "1");
@@ -266,12 +289,27 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
           );
         }
         const accepts = exactMethods(parsed.data.accepts);
-        const providerRequests = await options.providerRequests({
-          purpose: parsed.data.purpose,
-          binding: parsed.data.binding,
-          accepts,
-          ttlSeconds: parsed.data.ttlSeconds,
-        });
+        let providerRequests: Readonly<Record<string, unknown>>;
+        if (options.providerRequests) {
+          if (parsed.data.providerRequests !== undefined) {
+            throw new Error(
+              "Issuer provider requests are disabled for this verifier",
+            );
+          }
+          providerRequests = await options.providerRequests({
+            purpose: parsed.data.purpose,
+            binding: parsed.data.binding,
+            accepts,
+            ttlSeconds: parsed.data.ttlSeconds,
+          });
+        } else {
+          if (parsed.data.providerRequests === undefined) {
+            throw new Error(
+              "Authenticated issuer provider requests are required",
+            );
+          }
+          providerRequests = parsed.data.providerRequests;
+        }
         const requirement = createHumanRequirement({
           purpose: parsed.data.purpose,
           method: parsed.data.method,
@@ -325,7 +363,7 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
     async (request: Request, response: Response) => {
       if (options.rateLimiter) {
         const key = request.ip ?? "unknown";
-        const limit = options.rateLimiter.consume(`verify:${key}`);
+        const limit = await options.rateLimiter.consume(`verify:${key}`);
         response.setHeader("x-ratelimit-remaining", String(limit.remaining));
         if (!limit.allowed) {
           response.setHeader("retry-after", "1");

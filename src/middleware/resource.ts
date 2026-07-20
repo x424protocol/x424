@@ -64,6 +64,23 @@ export type BodyInputExtractor = (input: {
   readonly body: unknown;
 }) => RequestBodyDigestInput | Promise<RequestBodyDigestInput>;
 
+export interface RequirementIssuanceInput {
+  readonly purpose: string;
+  readonly method: string;
+  readonly uri: string;
+  readonly audience: string;
+  readonly bodyInput: RequestBodyDigestInput;
+  readonly binding: HumanBinding;
+  readonly accepts: readonly HumanMethodRequirement[];
+  readonly ttlSeconds: number;
+  readonly providerRequests?: Readonly<Record<string, unknown>>;
+}
+
+/** A self-hosted or managed verifier that creates and retains requirements. */
+export interface RequirementIssuer {
+  issueRequirement(input: RequirementIssuanceInput): Promise<HumanRequirement>;
+}
+
 export interface ProtectOptions {
   readonly deploymentProfile: DeploymentProfile;
   readonly purpose: string;
@@ -73,6 +90,8 @@ export interface ProtectOptions {
   readonly verifier: ResultVerifier | ResultVerifierKeySet;
   readonly extractBinding: BindingExtractor;
   readonly requirementStore: RequirementStore;
+  /** Optional remote issuer. When present it owns creation and persistence. */
+  readonly requirementIssuer?: RequirementIssuer;
   /** Required for mutations on eval/prod; required for all state-changing acceptance. */
   readonly replayStore?: ResultReplayStore;
   readonly publicOrigin: PublicOriginConfig;
@@ -83,6 +102,7 @@ export interface ProtectOptions {
     readonly purpose: string;
     readonly binding: HumanBinding;
     readonly accepts: readonly HumanMethodRequirement[];
+    readonly ttlSeconds: number;
   }) =>
     | Promise<Readonly<Record<string, unknown>>>
     | Readonly<Record<string, unknown>>;
@@ -179,14 +199,16 @@ async function issueChallenge(
   binding: HumanBinding,
   bodyInput: RequestBodyDigestInput,
 ): Promise<HumanRequirement> {
+  const ttlSeconds = options.ttlSeconds ?? 300;
   const providerRequests = options.providerRequests
     ? await options.providerRequests({
         purpose: options.purpose,
         binding,
         accepts: options.accepts,
+        ttlSeconds,
       })
     : undefined;
-  const requirement = createHumanRequirement({
+  const issuanceInput: RequirementIssuanceInput = {
     purpose: options.purpose,
     method,
     uri,
@@ -194,10 +216,24 @@ async function issueChallenge(
     bodyInput,
     binding,
     accepts: options.accepts,
-    ttlSeconds: options.ttlSeconds ?? 300,
+    ttlSeconds,
     ...(providerRequests === undefined ? {} : { providerRequests }),
+  };
+  const requirement = options.requirementIssuer
+    ? await options.requirementIssuer.issueRequirement(issuanceInput)
+    : createHumanRequirement(issuanceInput);
+  assertCurrentMatchesStored({
+    requirement,
+    method,
+    uri,
+    binding,
+    bodyInput,
+    purpose: options.purpose,
+    audience: options.audience,
   });
-  await options.requirementStore.put(requirement);
+  if (!options.requirementIssuer) {
+    await options.requirementStore.put(requirement);
+  }
   return requirement;
 }
 

@@ -1,0 +1,35 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: x424-verifier
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+{{- if or .Values.networkPolicy.worldCidrs .Values.networkPolicy.redisCidrs }}
+  egress:
+    - to:
+{{- range .Values.networkPolicy.worldCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+{{- range .Values.networkPolicy.redisCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6379
+{{- else }}
+  egress: []
+{{- end }}
+{{- end }}

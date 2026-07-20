@@ -26,6 +26,8 @@ production access or value.
 11. Accepting multiple providers does not imply cross-provider deduplication;
     the relying party must prevent duplicate participation when its policy
     requires one person across provider boundaries.
+12. Adopter-supplied provider request material is accepted only from an
+    authenticated issuer and is adapter-validated before nonce registration.
 
 ## Threats and controls
 
@@ -59,6 +61,9 @@ production access or value.
 
 - Generate RP request signatures only on the backend. Never expose the RP
   signing key to a browser, public environment variable, log, or MCP tool.
+- A managed verifier receives only signed RP request material. Pin app, RP,
+  action, environment, exact accepted methods, signal/binding, and bounded
+  lifetime before storing it; reject unknown provider-request keys.
 - Forward the exact IDKit result to World's `/api/v4/verify/{rp_id}` endpoint,
   which verifies current v4 and accepted legacy v3 results; do not trim,
   convert, or rebuild native proof fields.

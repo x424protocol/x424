@@ -23,6 +23,7 @@ export {
   createWorldIdProviderRequest,
   createWorldIdProviderRequests,
   createWorldIdVerifierProfile,
+  worldProofOfHuman,
   worldIdProviderRequestFromRequirement,
   type CreateWorldIdProviderRequestOptions,
   type WorldIdAdapterOptions,

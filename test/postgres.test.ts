@@ -16,6 +16,9 @@ class MemoryPg {
       return { rowCount: 0, rows: [] };
     }
     if (text.includes("INSERT INTO x424_nonces")) {
+      if (this.nonces.has(String(params[0]))) {
+        return { rowCount: 0, rows: [] };
+      }
       this.nonces.set(String(params[0]), {
         nonce: String(params[1]),
         expiresAt: String(params[2]),
@@ -35,6 +38,9 @@ class MemoryPg {
       return { rowCount: 0, rows: [] };
     }
     if (text.includes("INSERT INTO x424_requirements")) {
+      if (this.requirements.has(String(params[0]))) {
+        return { rowCount: 0, rows: [] };
+      }
       this.requirements.set(String(params[0]), {
         document: String(params[1]),
         expiresAt: String(params[2]),
@@ -107,6 +113,16 @@ describe("PostgresX424Store", () => {
       requirement.nonce,
       requirement.expiresAt,
     );
+    await expect(store.requirements.put(requirement)).rejects.toThrow(
+      "already exists",
+    );
+    await expect(
+      store.nonces.put(
+        requirement.dependencyId,
+        "replacement",
+        requirement.expiresAt,
+      ),
+    ).rejects.toThrow("already exists");
     expect(
       await store.nonces.consume(requirement.dependencyId, requirement.nonce),
     ).toBe(true);
@@ -117,5 +133,21 @@ describe("PostgresX424Store", () => {
     expect(await store.results.consume("r1", requirement.expiresAt)).toBe(
       false,
     );
+    await expect(
+      store.providers.consume({
+        providerId: "world",
+        methodId: "proof-of-human",
+        uniquenessScope: { kind: "action", id: "one" },
+        subjectDigest: "hmac-sha256:same",
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      store.providers.consume({
+        providerId: "world",
+        methodId: "proof-of-human",
+        uniquenessScope: { kind: "action", id: "two" },
+        subjectDigest: "hmac-sha256:same",
+      }),
+    ).resolves.toBe(true);
   });
 });

@@ -314,6 +314,7 @@ describe("World ID reference adapter and result service", () => {
       rpId: "rp_test",
       action: "x424-test",
       environment: "staging",
+      allowLegacyProofs: true,
       verifyRemote: async () => {
         throw new Error("remote verifier must not be called");
       },

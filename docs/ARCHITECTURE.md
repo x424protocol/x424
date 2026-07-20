@@ -157,10 +157,10 @@ systems, analytics, queues, and public chain state.
 ## Reference repository boundary
 
 The repository ships a deterministic kernel, provider-adapter SDK, fixed
-conformance artifacts, JSON Schemas, integration surfaces, a reusable World
-verifier profile, and Redis 6.2+ atomic state—not a hosted authority. The
-Express router defaults to process-local requirement state for examples and
-accepts shared requirement, dependency, provider-replay, and result stores for
-real deployments. Production deployments still add authenticated issuance,
-managed signing keys, proof-safe metrics, rate limits, and provider-specific
-operations.
+conformance artifacts, JSON Schemas, maintained framework and managed-service
+clients, a reusable World verifier profile, Redis/PostgreSQL atomic state, and
+a runnable self-hosted verifier—not a hosted authority. The managed service and
+console remain a separate operator repository and consume only public OpenAPI,
+metadata, SDK, and conformance artifacts. `prod-ha-0.2` requires an external
+non-exportable result signer and pairwise deriver; local key material is limited
+to development/evaluation profiles.

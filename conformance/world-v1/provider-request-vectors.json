@@ -1,0 +1,53 @@
+{
+  "profile": "world:proof-of-human@1",
+  "verifier": {
+    "appId": "app_conformance",
+    "rpId": "rp_conformance",
+    "action": "x424-conformance",
+    "environment": "staging"
+  },
+  "binding": {
+    "kind": "agent_key",
+    "value": "sha256:conformance-agent"
+  },
+  "providerRequest": {
+    "appId": "app_conformance",
+    "rpId": "rp_conformance",
+    "action": "x424-conformance",
+    "environment": "staging",
+    "preset": "proof_of_human",
+    "allowLegacyProofs": false,
+    "signal": "sha256:conformance-agent",
+    "signalHash": "0x002f571d0a82566d4fc606915420ec6078ffbba262ef9a3c64efe1653d3d5177",
+    "rpContext": {
+      "rp_id": "rp_conformance",
+      "nonce": "0x000bcd95f8e5d4abe7e9ef4777596f9d0f19e4e570e671a829637cbae09e7cea",
+      "created_at": 1784562532,
+      "expires_at": 1784562832,
+      "signature": "0x48a1774bd70228bdfa526093291008c3d520bc922feb638808c3108e9217eda41cd82e58bdeb76fa55cb956310981226a887a4dc9624059806dd7064ec422dd21c"
+    }
+  },
+  "negativeMutations": [
+    { "name": "wrong-app", "path": "appId", "value": "app_other" },
+    { "name": "wrong-rp", "path": "rpId", "value": "rp_other" },
+    {
+      "name": "wrong-rp-context",
+      "path": "rpContext.rp_id",
+      "value": "rp_other"
+    },
+    { "name": "wrong-action", "path": "action", "value": "other-action" },
+    {
+      "name": "wrong-environment",
+      "path": "environment",
+      "value": "production"
+    },
+    { "name": "wrong-signal", "path": "signal", "value": "sha256:other-agent" },
+    { "name": "wrong-signal-hash", "path": "signalHash", "value": "0x00" },
+    { "name": "legacy-downgrade", "path": "allowLegacyProofs", "value": true },
+    {
+      "name": "short-lifetime",
+      "path": "rpContext.expires_at",
+      "value": 1784562540
+    }
+  ]
+}

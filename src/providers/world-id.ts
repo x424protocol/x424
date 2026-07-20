@@ -3,6 +3,10 @@ import { signRequest } from "@worldcoin/idkit-core/signing";
 import { canonicalJson, sha256 } from "../canonical.js";
 import { defineMethodCatalog, methodKey } from "../catalog.js";
 import type { ProviderProofResolver } from "../client.js";
+import {
+  assertProviderEgressAllowed,
+  type CircuitBreaker,
+} from "../ops/limits.js";
 import { defineHumanMethodDescriptor } from "../provider-sdk.js";
 import type {
   HumanBinding,
@@ -237,6 +241,8 @@ export type WorldIdBindingValidator = (input: {
 }) => Promise<boolean>;
 
 export interface WorldIdAdapterOptions {
+  /** Optional for direct adapters; verifier profiles always pin it. */
+  readonly appId?: string;
   readonly rpId: string;
   readonly action: string;
   readonly environment: "production" | "staging";
@@ -246,6 +252,9 @@ export interface WorldIdAdapterOptions {
   readonly validateBinding?: WorldIdBindingValidator;
   readonly verifyRemote?: WorldIdRemoteVerifier;
   readonly fetchImplementation?: typeof fetch;
+  /** Exact HTTPS origins permitted for World verification egress. */
+  readonly allowedEgressOrigins?: readonly string[];
+  readonly circuitBreaker?: CircuitBreaker;
   readonly now?: () => Date;
 }
 
@@ -506,6 +515,61 @@ export class WorldIdAdapter implements HumanProviderAdapter {
     return [WORLD_ID_PROOF_OF_HUMAN_METHOD, WORLD_ID_LEGACY_ORB_METHOD];
   }
 
+  validateProviderRequest(
+    input: Parameters<HumanProviderAdapter["validateProviderRequest"]>[0],
+  ): void {
+    const providerRequest = parseWorldIdProviderRequest(input.providerRequest);
+    const acceptsCurrent = acceptedWorldMethod(
+      input.requirement,
+      WORLD_ID_PROOF_OF_HUMAN_METHOD,
+    );
+    const acceptsLegacy = acceptedWorldMethod(
+      input.requirement,
+      WORLD_ID_LEGACY_ORB_METHOD,
+    );
+    const legacyEnabled = this.#options.allowLegacyProofs === true;
+    const createdAt = providerRequest.rpContext.created_at;
+    const expiresAt = providerRequest.rpContext.expires_at;
+    const ttlSeconds = expiresAt - createdAt;
+
+    if (
+      (this.#options.appId !== undefined &&
+        providerRequest.appId !== this.#options.appId) ||
+      providerRequest.rpId !== this.#options.rpId ||
+      providerRequest.rpContext.rp_id !== this.#options.rpId ||
+      providerRequest.action !== this.#options.action ||
+      providerRequest.environment !== this.#options.environment ||
+      providerRequest.signal !== input.requirement.binding.value ||
+      providerRequest.signalHash !== hashSignal(input.requirement.binding.value)
+    ) {
+      throw new Error(
+        "World provider request does not match the configured verifier profile",
+      );
+    }
+    if (!acceptsCurrent) {
+      throw new Error("A World Proof of Human ceremony requires the v4 method");
+    }
+    if (
+      acceptsLegacy !== providerRequest.allowLegacyProofs ||
+      (acceptsLegacy && !legacyEnabled) ||
+      (input.acceptedMethod.methodId === WORLD_ID_LEGACY_ORB_METHOD.methodId &&
+        !legacyEnabled)
+    ) {
+      throw new Error(
+        "World provider request legacy policy does not match accepted methods",
+      );
+    }
+    if (
+      !Number.isSafeInteger(createdAt) ||
+      !Number.isSafeInteger(expiresAt) ||
+      createdAt >= expiresAt ||
+      ttlSeconds < 30 ||
+      ttlSeconds > 900
+    ) {
+      throw new Error("World provider request lifetime is invalid");
+    }
+  }
+
   async verify(
     input: Parameters<HumanProviderAdapter["verify"]>[0],
   ): Promise<ProviderVerifiedHuman> {
@@ -581,20 +645,31 @@ export class WorldIdAdapter implements HumanProviderAdapter {
       this.#options.environment === "production"
         ? "https://developer.world.org"
         : "https://staging-developer.worldcoin.org";
-    const response = await fetchImplementation(
-      `${origin}/api/v4/verify/${encodeURIComponent(this.#options.rpId)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(nativeProof),
-        signal: AbortSignal.timeout(15_000),
-      },
+    assertProviderEgressAllowed(
+      origin,
+      this.#options.allowedEgressOrigins ?? [origin],
     );
-    const body: unknown = await response.json();
-    if (!response.ok) {
-      throw new Error(`World verification failed (${response.status})`);
+    this.#options.circuitBreaker?.assertClosed();
+    try {
+      const response = await fetchImplementation(
+        `${origin}/api/v4/verify/${encodeURIComponent(this.#options.rpId)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(nativeProof),
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        throw new Error(`World verification failed (${response.status})`);
+      }
+      this.#options.circuitBreaker?.recordSuccess();
+      return body;
+    } catch (error) {
+      this.#options.circuitBreaker?.recordFailure();
+      throw error;
     }
-    return body;
   }
 }
 
@@ -613,6 +688,13 @@ export interface WorldIdVerifierProfile {
     readonly accepts: readonly HumanMethodRequirement[];
     readonly ttlSeconds: number;
   }) => Promise<Readonly<Record<string, unknown>>>;
+}
+
+/** World-first high-level profile used by createX424 and managed issuance. */
+export function worldProofOfHuman(
+  options: WorldIdVerifierProfileOptions,
+): WorldIdVerifierProfile {
+  return createWorldIdVerifierProfile(options);
 }
 
 function exactRequirementAccepted(

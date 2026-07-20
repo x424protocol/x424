@@ -5,9 +5,9 @@
 
 > Human Dependency Protocol · public pre-alpha · unaudited
 
-**x424 is an open HTTP protocol for making one request depend on one explicitly
-accepted unique human.** It works across users, agents, wallets, backends, and
-APIs without turning any provider into a universal identity authority.
+**x424 makes unique humanity a native HTTP dependency—for users, agents, and
+APIs.** A resource can require one explicitly accepted unique human without
+turning any provider into a universal identity authority.
 
 [Protocol](docs/PROTOCOL.md) · [Adoption contract](docs/ADOPTER_CONTRACT.md) ·
 [Roadmap](docs/ROADMAP.md) · [OpenAPI](openapi/x424.openapi.json) ·
@@ -33,6 +33,12 @@ authentication -> x424 -> x402 -> authorization -> execution
 x424 standardizes the dependency, not the underlying proof system. It does not
 define a human identity, equate providers, create an account, or authorize the
 application action.
+
+Use a provider such as World directly when a product only needs login or
+account enrollment. Use x424 when satisfying an accepted unique-human method
+is a condition for executing an HTTP action. Providers prove uniqueness, x424
+standardizes the dependency, and the application remains the authorization
+authority.
 
 ## Adoption promise
 
@@ -97,13 +103,17 @@ standard. The repository now includes:
 - a reusable World verifier profile with signed RP requests, built-in signal
   binding, and an explicit legacy Orb fallback method;
 - a generic HTTP verifier resolver and one-challenge/one-retry client;
+- maintained Express, Fetch, and Next.js resource adapters;
+- authenticated managed-verifier issuance/state/replay clients;
+- deterministic x424-before-x402 server and client composition;
+- a runnable non-root Redis verifier image and Helm chart;
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
 
-It does **not** yet include an audited deployable verifier, managed key custody,
-authenticated verifier metadata, production authorization/rate-limit policy,
-or an independent implementation. Follow the concrete release gates in the
-[roadmap](docs/ROADMAP.md).
+It remains **unaudited** and does not yet include the separately operated
+managed service/console, an externally validated HSM integration, or an
+independent implementation. Deployability is not the 0.2 production gate;
+follow the evidence requirements in the [roadmap](docs/ROADMAP.md).
 
 ## Try the developer preview
 
@@ -132,19 +142,27 @@ The package keeps the provider-neutral kernel separate from integrations:
 
 ```ts
 import { createHumanRequirement } from "x424/core";
+import { createX424 } from "x424";
 import { createHttpHumanDependencyResolver, fetchWithX424 } from "x424/client";
 import { defineHumanProviderAdapter } from "x424/adapters";
 import {
   WorldIdAdapter,
   createWorldIdMethodRequirements,
-  createWorldIdVerifierProfile,
-} from "x424/providers/world-id";
+  worldProofOfHuman,
+} from "x424/world";
 import {
   createWorldIdIdKitProofResolver,
   createWorldIdProofRequest,
 } from "x424/providers/world-id/client";
 import { RedisX424Store } from "x424/redis";
-import { createX424HttpRouter } from "x424/express";
+import {
+  createExpressHumanDependencyMiddleware,
+  createX424HttpRouter,
+} from "x424/express";
+import { createFetchX424Handler } from "x424/fetch";
+import { createNextX424Handler } from "x424/next";
+import { ManagedVerifierClient } from "x424/managed";
+import { fetchWithX424AndX402 } from "x424/x402";
 import { createX424McpServer } from "x424/mcp";
 ```
 
@@ -158,9 +176,9 @@ World verification result.
 Create the reusable profile once:
 
 ```ts
-import { createWorldIdVerifierProfile } from "x424/providers/world-id";
+import { worldProofOfHuman } from "x424/world";
 
-const world = createWorldIdVerifierProfile({
+const world = worldProofOfHuman({
   appId: process.env.WORLD_APP_ID!,
   rpId: process.env.WORLD_RP_ID!,
   signingKeyHex: process.env.WORLD_RP_SIGNING_KEY!,
@@ -172,6 +190,10 @@ const world = createWorldIdVerifierProfile({
 // world.catalog and world.adapter configure X424Service.
 // world.accepts and world.providerRequests configure requirement issuance.
 ```
+
+For a managed verifier, the same backend-generated `world.providerRequests`
+is submitted through authenticated issuance. The RP signing key stays in the
+adopter backend; only signed request material crosses the verifier boundary.
 
 The signing key never enters `providerRequests`. With legacy enabled, IDKit may
 complete the same ceremony with either `world:proof-of-human@1` (v4) or
@@ -243,6 +265,38 @@ The helper retries only when both status `424` and a valid `HUMAN-REQUIRED`
 header are present. It never chooses an unlisted provider or treats ordinary
 dependency failures as x424.
 
+For endpoints that also use x402, `fetchWithX424AndX402()` enforces the only
+supported order: initial `424`, human retry that may receive `402`, then a final
+retry carrying separate `HUMAN-PROOF` and `PAYMENT-SIGNATURE` headers. The
+server helpers keep humanity middleware before payment middleware and require
+normal application idempotency for mutations.
+
+## Managed verifier configuration
+
+The managed service is a separate operator implementation of the public API.
+Resource servers switch to it through configuration only:
+
+```ts
+import { ManagedVerifierClient } from "x424/managed";
+
+const managed = new ManagedVerifierClient({
+  baseUrl: process.env.X424_VERIFIER_URL!,
+  headers: () => ({
+    authorization: `Bearer ${process.env.X424_PROJECT_TOKEN!}`,
+  }),
+});
+
+const protection = {
+  requirementIssuer: managed,
+  requirementStore: managed.requirementStore(),
+  replayStore: managed.resultReplayStore(),
+  providerRequests: world.providerRequests,
+};
+```
+
+The client pins the configured origin, refuses redirects, bounds responses,
+and never submits provider signing keys.
+
 ## Accept the retried request
 
 ```ts
@@ -293,6 +347,9 @@ const method = defineHumanMethodDescriptor({
 export const adapter = defineHumanProviderAdapter({
   providerId: "example-provider",
   methods: [method],
+  validateProviderRequest: ({ providerRequest }) => {
+    validateSignedProviderRequest(providerRequest);
+  },
   verify: async ({ requirement, proof }) => {
     const native = await verifyWithProvider(proof.nativeProof, requirement);
     return {
@@ -338,12 +395,13 @@ system.
 ## Repository map
 
 ```text
-src/                     Core, provider profiles, Redis state, HTTP, and MCP
+src/                     Core, provider profiles, framework/managed clients, state, and MCP
 schemas/                 JSON Schema 2020-12 wire contracts
 conformance/             Fixed cross-implementation vectors
 openapi/                 OpenAPI 3.1 verifier contract
 demo/                    Provider-safe dependency console
 examples/                Generic HTTP and provider-adapter examples
+deploy/verifier/         Runnable non-root image, Compose profile, and Helm chart
 test/                    Core, security, provider, Redis, and contract tests
 docs/PROTOCOL.md          Normative x424/0.1 contract
 docs/ADOPTER_CONTRACT.md  Off-the-shelf responsibility boundary

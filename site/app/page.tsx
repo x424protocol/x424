@@ -15,12 +15,12 @@ export default function Home() {
       <section className="hero" aria-labelledby="page-title">
         <p className="eyebrow">Human Dependency Protocol · pre-alpha</p>
         <h1 id="page-title">
-          Make an HTTP action depend on one accepted human.
+          x424 makes unique humanity a native HTTP dependency—for users, agents,
+          and APIs.
         </h1>
         <p className="lede">
           One challenge. One explicitly accepted provider method. One signed
-          result bound to the request and caller. x424 gives users, agents,
-          wallets, and APIs the same dependency contract.
+          result bound to the request and caller.
         </p>
         <div className="actions">
           <a className="primary" href={repositoryUrl}>
@@ -86,7 +86,7 @@ export default function Home() {
 
       <footer>
         <span>Apache-2.0</span>
-        <span>HTTP-native unique-human dependencies.</span>
+        <span>Unique humanity is an HTTP dependency.</span>
       </footer>
     </main>
   );

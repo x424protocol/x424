@@ -162,10 +162,26 @@ export interface HumanEvaluation {
   readonly failures: readonly HumanFailure[];
 }
 
+export interface ProviderRequestValidationInput {
+  readonly requirement: HumanRequirement;
+  readonly acceptedMethod: HumanMethodRequirement;
+  /** Opaque material selected by providerId:methodId from providerRequests. */
+  readonly providerRequest: unknown;
+}
+
 export interface HumanProviderAdapter {
   readonly providerId: string;
 
   methods(): readonly HumanMethodDescriptor[];
+
+  /**
+   * Validate provider-native request material before a dependency nonce is
+   * registered. Hosted verifiers use this boundary for adopter-signed material
+   * without receiving the adopter's provider signing key.
+   */
+  validateProviderRequest(
+    input: ProviderRequestValidationInput,
+  ): Promise<void> | void;
 
   verify(input: {
     readonly requirement: HumanRequirement;

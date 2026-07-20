@@ -5,6 +5,9 @@
 
 ## 1. Purpose
 
+x424 makes unique humanity a native HTTP dependency—for users, agents, and
+APIs.
+
 x424 lets an HTTP resource declare that executing one request depends on one
 explicitly accepted unique-human proof. It defines:
 
@@ -82,8 +85,12 @@ Rules:
    30–900 seconds.
 6. At least one exact method MUST be listed.
 7. `providerRequests` contains opaque provider-native request material keyed by
-   `providerId:methodId`. It MUST be created by the trusted relying-party
-   backend when provider signing keys are involved.
+   `providerId:methodId`. A deployment MUST configure exactly one source: a
+   self-hosted verifier generates it, or an authenticated adopter backend
+   supplies signed material. Before registering the dependency nonce, the
+   selected provider adapter MUST validate tenant/provider policy, exact method,
+   RP, action, environment, caller binding, and lifetime. Provider signing keys
+   MUST never be submitted to a verifier or client.
 8. Requirements MUST be integrity protected in production. TLS is mandatory;
    a signed outer requirement is RECOMMENDED when the resource server and
    verifier are separate authorities.

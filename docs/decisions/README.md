@@ -10,5 +10,5 @@ Rules:
 - Do not silently reinterpret an existing protocol or descriptor version.
 - Link stable requirement IDs from [REQUIREMENT_IDS.md](../program/REQUIREMENT_IDS.md).
 - Update schemas, OpenAPI, vectors, types, examples, and normative text together.
-- Problee-driven portable changes follow
+- Adopter-, provider-, or operator-driven portable changes follow
   [CONFLICT_GOVERNANCE.md](../program/CONFLICT_GOVERNANCE.md).

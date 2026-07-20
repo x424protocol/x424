@@ -10,6 +10,18 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
+    "paths": {
+      "x424": ["./src/index.ts"],
+      "x424/client": ["./src/client.ts"],
+      "x424/core": ["./src/core.ts"],
+      "x424/express": ["./src/express.ts"],
+      "x424/managed": ["./src/managed.ts"],
+      "x424/providers/world-id/client": ["./src/providers/world-id-client.ts"],
+      "x424/redis": ["./src/redis.ts"],
+      "x424/world": ["./src/providers/world-id.ts"],
+      "x424/x402": ["./src/x402.ts"]
+    },
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2022",
