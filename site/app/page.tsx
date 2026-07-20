@@ -14,10 +14,13 @@ export default function Home() {
 
       <section className="hero" aria-labelledby="page-title">
         <p className="eyebrow">Human Dependency Protocol · pre-alpha</p>
-        <h1 id="page-title">Make an HTTP action depend on one human.</h1>
+        <h1 id="page-title">
+          Make an HTTP action depend on one accepted human.
+        </h1>
         <p className="lede">
-          x424 is an open, provider-neutral protocol for unique-human
-          requirements across users, agents, wallets, and APIs.
+          One challenge. One explicitly accepted provider method. One signed
+          result bound to the request and caller. x424 gives users, agents,
+          wallets, and APIs the same dependency contract.
         </p>
         <div className="actions">
           <a className="primary" href={repositoryUrl}>
@@ -26,6 +29,7 @@ export default function Home() {
           <a href={`${repositoryUrl}/blob/main/openapi/x424.openapi.json`}>
             OpenAPI
           </a>
+          <a href={`${repositoryUrl}/blob/main/docs/ROADMAP.md`}>Roadmap</a>
         </div>
       </section>
 

@@ -63,3 +63,10 @@ Before a stable 1.0 profile:
 - register media/header parameters if the ecosystem reaches interoperability;
   and
 - seek independent review before any IETF or other standards submission.
+
+## Adoption evidence
+
+Protocol completeness is necessary but insufficient. Standards claims require
+independent evidence that adopters do not reimplement the protected semantics.
+The [adopter contract](ADOPTER_CONTRACT.md) defines that boundary, and the
+[roadmap](ROADMAP.md) defines the release and interoperability gates.

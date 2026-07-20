@@ -30,6 +30,9 @@ jobs:
       - name: Check
         run: pnpm check
 
+      - name: Inspect publishable package
+        run: npm pack --dry-run
+
       - name: Install website dependencies
         working-directory: site
         run: npm ci

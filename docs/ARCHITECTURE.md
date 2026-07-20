@@ -155,8 +155,9 @@ systems, analytics, queues, and public chain state.
 ## Reference repository boundary
 
 The repository ships a deterministic kernel, provider-adapter SDK, fixed
-conformance artifacts, JSON Schemas, and integration surfaces—not a hosted
-authority. The Express router uses process-local pending state and is a
-reference only. Production deployments replace it with authenticated issuance,
-distributed atomic nonce/result stores, managed signing keys, metrics without
-proof data, rate limits, and provider-specific operations.
+conformance artifacts, JSON Schemas, integration surfaces, and Redis 6.2+
+atomic state—not a hosted authority. The Express router defaults to
+process-local state for examples and accepts a shared `RequirementStore` for
+real deployments. Production deployments still add authenticated issuance,
+managed signing keys, proof-safe metrics, rate limits, and provider-specific
+operations.

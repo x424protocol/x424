@@ -1,0 +1,40 @@
+name: Protocol change
+description: Propose a versioned change to x424 wire or acceptance semantics.
+title: "protocol: "
+labels: ["protocol"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Interoperability problem
+      description: Describe the concrete mismatch or missing portable behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Name every wire, canonicalization, binding, replay, or privacy behavior affected.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and privacy impact
+      description: Explain how the change fails closed and what new threats it creates.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: State whether the change requires a new x424 or descriptor version.
+    validations:
+      required: true
+  - type: textarea
+    id: vectors
+    attributes:
+      label: Conformance evidence
+      description: List the positive and negative vectors or independent implementation results that prove the behavior.
+    validations:
+      required: true

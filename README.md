@@ -1,25 +1,53 @@
 # x424
 
+[![CI](https://github.com/x424protocol/x424/actions/workflows/ci.yml/badge.svg)](https://github.com/x424protocol/x424/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 > Human Dependency Protocol · public pre-alpha · unaudited
 
-[x424.org](https://x424.org) · [Protocol](docs/PROTOCOL.md) ·
-[Adoption guide](docs/ADOPTION.md) · [OpenAPI](openapi/x424.openapi.json) ·
-[Conformance vectors](conformance/v0.1/README.md) ·
-[Governance](docs/GOVERNANCE.md)
+**x424 is an open HTTP protocol for making one request depend on one explicitly
+accepted unique human.** It works across users, agents, wallets, backends, and
+APIs without turning any provider into a universal identity authority.
 
-**x424 makes an HTTP action depend on one explicitly accepted unique human.**
+[Protocol](docs/PROTOCOL.md) · [Adoption contract](docs/ADOPTER_CONTRACT.md) ·
+[Roadmap](docs/ROADMAP.md) · [OpenAPI](openapi/x424.openapi.json) ·
+[Conformance](conformance/v0.1/README.md) · [Governance](docs/GOVERNANCE.md)
 
-x402 makes an action depend on payment. x424 makes it depend on a unique-human
-proof—whether the caller is a browser, wallet, backend, or autonomous agent.
-The resource server returns `424 Failed Dependency` with `HUMAN-REQUIRED`. A
-human completes one accepted provider method, a verifier issues a short-lived
-result bound to the exact request and caller, and the client retries with that
-result in `HUMAN-PROOF`.
+## Why x424
 
-x424 is provider-neutral and policy-explicit. It standardizes the dependency,
-not the underlying proof system. Providers remain distinct; a relying party
-must name every accepted provider, method, descriptor version, uniqueness
-scope, assurance label, verification mode, and freshness rule.
+Unique-human providers prove different things, but every application currently
+rebuilds the same dependency machinery: challenge discovery, request binding,
+provider handoff, verifier submission, replay prevention, result validation,
+and retry.
+
+x424 standardizes that machinery. A resource names the exact provider methods
+it accepts. A human completes one method. A verifier returns a short-lived
+result bound to the request and caller. The client retries with that result.
+
+When a service also requires payment, the layers stay independent:
+
+```text
+authentication -> x424 -> x402 -> authorization -> execution
+```
+
+x424 standardizes the dependency, not the underlying proof system. It does not
+define a human identity, equate providers, create an account, or authorize the
+application action.
+
+## Adoption promise
+
+For a supported provider, an adopter should supply only:
+
+- provider credentials and environment;
+- accepted methods and freshness policy;
+- the authenticated wallet, session, request, or agent-key binding;
+- provider UI appropriate to its platform; and
+- application authorization and idempotency.
+
+x424 should own the wire protocol, signed provider request construction, proof
+submission, strict verification, privacy boundary, replay controls, result
+signing, and client retry. The measurable boundary is defined in the
+[adopter contract](docs/ADOPTER_CONTRACT.md).
 
 ## Wire flow
 
@@ -47,7 +75,7 @@ Vary: HUMAN-PROOF
 Content-Type: application/problem+json
 ```
 
-After verification:
+The retry carries the verifier result, never a raw provider proof:
 
 ```http
 POST /action HTTP/1.1
@@ -55,86 +83,158 @@ HUMAN-PROOF: <x424-result+jws>
 Idempotency-Key: <application-key-for-mutations>
 ```
 
-Provider-native proofs never belong in an HTTP header or at the resource
-server. `HUMAN-RESULT` is the verifier-to-client copy of the same signed result
-token later carried in `HUMAN-PROOF`.
+## Current status
 
-## Install
+x424/0.1 is a developer preview, not a production security product or an IETF
+standard. The repository now includes:
+
+- canonical requirement/result codecs and request digests;
+- exact audience, purpose, time, request, and caller binding;
+- Ed25519 signed results and pairwise human identifiers;
+- atomic-store interfaces plus Redis-backed requirement, nonce, and replay
+  state;
+- a provider-adapter SDK and fixed negative conformance vectors;
+- a strict World Proof of Human profile with signed RP requests and built-in
+  signal binding;
+- a generic HTTP verifier resolver and one-challenge/one-retry client;
+- an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
+- a no-build dependency console.
+
+It does **not** yet include an audited deployable verifier, managed key custody,
+authenticated verifier metadata, production authorization/rate-limit policy,
+or an independent implementation. Follow the concrete release gates in the
+[roadmap](docs/ROADMAP.md).
+
+## Try the developer preview
+
+The first npm release has not been published. Run the current source directly:
 
 ```bash
-pnpm add x424
-```
-
-Package entry points keep the provider-neutral core separate from optional
-integration surfaces:
-
-```ts
-import { createHumanRequirement } from "x424/core";
-import { fetchWithX424 } from "x424/client";
-import { defineHumanProviderAdapter } from "x424/adapters";
-import { WorldIdAdapter } from "x424/providers/world-id";
-import { createX424HttpRouter } from "x424/express";
-import { createX424McpServer } from "x424/mcp";
-```
-
-The repository itself uses Node.js 22+ and pnpm 9+:
-
-```bash
+git clone https://github.com/x424protocol/x424.git
+cd x424
+corepack enable
 pnpm install
 pnpm check
 pnpm example
 ```
 
-## Client retry
+After the first release, the supported install command will be:
 
-Agents and applications can use the same one-challenge/one-retry flow. The
-resolver owns the selected provider ceremony and verifier call:
+```bash
+pnpm add x424
+```
+
+The repository requires Node.js 22+ and pnpm 9+.
+
+## Package surfaces
+
+The package keeps the provider-neutral kernel separate from integrations:
 
 ```ts
-import { fetchWithX424 } from "x424/client";
+import { createHumanRequirement } from "x424/core";
+import { createHttpHumanDependencyResolver, fetchWithX424 } from "x424/client";
+import { defineHumanProviderAdapter } from "x424/adapters";
+import {
+  WorldIdAdapter,
+  createWorldIdMethodRequirement,
+  createWorldIdProviderRequest,
+} from "x424/providers/world-id";
+import {
+  createWorldIdIdKitProofResolver,
+  createWorldIdProofRequest,
+} from "x424/providers/world-id/client";
+import { RedisX424Store } from "x424/redis";
+import { createX424HttpRouter } from "x424/express";
+import { createX424McpServer } from "x424/mcp";
+```
+
+## World Proof of Human profile
+
+The World profile uses the current `proofOfHuman` semantics. It generates the
+RP signature on the trusted backend, uses the x424 binding as the World signal,
+forwards the IDKit result without reshaping it, and accepts only a matching
+World verification result.
+
+Create one exact accepted method and its signed client request:
+
+```ts
+import {
+  WORLD_ID_METHOD_KEY,
+  createWorldIdMethodRequirement,
+  createWorldIdProviderRequest,
+} from "x424/providers/world-id";
+
+const binding = { kind: "agent_key", value: agentPublicKeyFingerprint };
+const accepts = [createWorldIdMethodRequirement()];
+const providerRequests = {
+  [WORLD_ID_METHOD_KEY]: createWorldIdProviderRequest({
+    appId: process.env.WORLD_APP_ID!,
+    rpId: process.env.WORLD_RP_ID!,
+    signingKeyHex: process.env.WORLD_RP_SIGNING_KEY!,
+    action: "publish-record",
+    environment: "production",
+    binding,
+  }),
+};
+```
+
+The signing key never enters `providerRequests`. This profile accepts only the
+current v4 `proof_of_human` credential. Legacy credentials require a separately
+versioned method with cross-version deduplication; the reference adapter does
+not claim that capability.
+
+World uniqueness is scoped to the RP and registered World action—not to the
+x424 dependency ID or signal. Reusing one World action therefore means one
+successful participation per human in that action, not one proof per HTTP
+request. Choose actions as real uniqueness domains.
+
+## Shared verifier state
+
+The Express router accepts a shared `RequirementStore`. The Redis runtime
+provides requirement, nonce, and result stores through one configured client:
+
+```ts
+import { createClient } from "redis";
+import { RedisX424Store } from "x424/redis";
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const state = new RedisX424Store({ client: redis });
+
+// X424Service({ nonceStore: state.nonces, ... })
+// createX424HttpRouter({ requirementStore: state.requirements, ... })
+// verifyHumanProofHeader({ replayStore: state.results, ... })
+```
+
+Redis 6.2+ supplies atomic state; the operator still owns topology, access
+control, monitoring, backup, and failure testing.
+
+## Client composition
+
+Applications decide how to display or deep-link the provider's connector URI.
+x424 builds the IDKit request, collects its exact result, submits it to the
+verifier, extracts the signed result, and retries the original request:
+
+```ts
+import { createHttpHumanDependencyResolver, fetchWithX424 } from "x424/client";
+import { createWorldIdIdKitProofResolver } from "x424/providers/world-id/client";
+
+const resolveHumanDependency = createHttpHumanDependencyResolver({
+  verifierUrl: "https://verifier.example.com/",
+  resolveProviderProof: createWorldIdIdKitProofResolver({
+    onConnectorUri: ({ connectorUri }) => renderQrOrDeepLink(connectorUri),
+  }),
+});
 
 const response = await fetchWithX424(url, requestInit, {
-  resolveHumanDependency: async ({ requirement }) => {
-    const humanProof = await walletOrUi.satisfy(requirement);
-    return { humanProof };
-  },
+  resolveHumanDependency,
 });
 ```
 
 The helper retries only when both status `424` and a valid `HUMAN-REQUIRED`
-header are present. It does not reinterpret ordinary dependency failures,
-choose a provider silently, perform payment, or authorize the action.
-
-## Declare a human dependency
-
-The application decides which exact methods satisfy each action:
-
-```ts
-import { createHumanRequirement, humanRequiredResponse } from "x424/core";
-
-const requirement = createHumanRequirement({
-  purpose: "publish-record",
-  method: "POST",
-  uri: "https://api.example.com/records",
-  audience: "https://api.example.com",
-  body: requestBody,
-  binding: { kind: "agent_key", value: agentPublicKeyFingerprint },
-  accepts: acceptedHumanMethods,
-  providerRequests: await buildProviderRequests(acceptedHumanMethods),
-});
-
-await sharedAtomicNonceStore.put(
-  requirement.dependencyId,
-  requirement.nonce,
-  requirement.expiresAt,
-);
-
-const response = humanRequiredResponse(requirement);
-// Send response.status, response.headers, and response.body.
-```
-
-`acceptedHumanMethods` is application policy, not a global x424 allowlist.
-Installing an adapter never makes that provider acceptable automatically.
+header are present. It never chooses an unlisted provider or treats ordinary
+dependency failures as x424.
 
 ## Accept the retried request
 
@@ -143,24 +243,23 @@ import { defineMethodCatalog, verifyHumanProofHeader } from "x424/core";
 
 const result = await verifyHumanProofHeader({
   humanProof: request.headers["human-proof"],
-  requirement,
+  requirement: storedRequirement,
   verifier: trustedVerifierPublicKey,
   catalog: defineMethodCatalog(acceptedMethodDescriptors),
   replayStore: sharedAtomicResultStore,
 });
 
-// x424 is satisfied. The application still authenticates, authorizes,
-// applies business rules, and executes idempotently.
+// x424 is satisfied. The application still authorizes and executes
+// idempotently.
 ```
 
-For state-changing actions, consume `resultId` atomically and use the normal
-application idempotency mechanism. x424 prevents proof reuse from becoming
-human-dependency reuse; it does not prevent duplicate business execution by
-itself.
+For mutations, consume `resultId` atomically and use the application's normal
+idempotency mechanism. x424 prevents human-result reuse; it does not prevent
+duplicate business execution by itself.
 
-## Build a provider adapter
+## Provider adapters
 
-Provider integrations use the public adapter contract without modifying core:
+Provider integrations use the public adapter contract without changing core:
 
 ```ts
 import {
@@ -168,7 +267,7 @@ import {
   defineHumanProviderAdapter,
 } from "x424/adapters";
 
-const UNIQUE_HUMAN_METHOD = defineHumanMethodDescriptor({
+const method = defineHumanMethodDescriptor({
   providerId: "example-provider",
   methodId: "unique-human",
   version: "1",
@@ -186,7 +285,7 @@ const UNIQUE_HUMAN_METHOD = defineHumanMethodDescriptor({
 
 export const adapter = defineHumanProviderAdapter({
   providerId: "example-provider",
-  methods: [UNIQUE_HUMAN_METHOD],
+  methods: [method],
   verify: async ({ requirement, proof }) => {
     const native = await verifyWithProvider(proof.nativeProof, requirement);
     return {
@@ -207,96 +306,56 @@ export const adapter = defineHumanProviderAdapter({
 });
 ```
 
-Every adapter must document exact claims, non-claims, uniqueness scope,
-binding, replay, recovery, privacy, and execution mode. Run `pnpm conformance`
-and add provider-native positive and negative fixtures before proposing an
-adapter.
-
-World ID 4.0 Orb is the first reference adapter. It forwards the native IDKit
-result to World's verifier without reshaping it, requires an application-owned
-binding validator, and keeps the returned nullifier inside the verifier
-boundary.
+Every adapter documents exact claims, non-claims, scope, binding, replay,
+recovery, privacy, and execution mode. Installing an adapter never adds it to a
+relying-party policy.
 
 ## Providers are not interchangeable
 
 x424 does not create a universal human identifier or deduplicate subjects
-across providers. A proof from provider A and a proof from provider B may belong
-to the same person. Accepting both for a one-person policy therefore requires a
-separate, explicit cross-provider duplicate-participation policy.
+across providers. A proof from provider A and a proof from provider B may
+belong to the same person. A one-person policy that accepts both providers
+needs an explicit cross-provider duplicate-participation policy.
 
-This is deliberate. Provider alternatives are named trust branches, never an
-implicit universal score or equivalence claim.
+Provider alternatives are named trust branches, never an implicit score or
+equivalence claim.
 
 ## Agents and humans
 
-x424 can bind a human dependency result to an agent public-key fingerprint for
-one request or narrow purpose. It does not label the agent as human and does not
-prove ownership, delegation, competence, authority, or continued human
-control. Durable human-agent relationships belong in a separate consent,
-mandate, recovery, and revocation system.
-
-## x402 composition
-
-A service that requires both uniqueness and payment evaluates them in this
-order:
-
-```text
-request -> x424 -> x402 -> authorization -> idempotent execution
-```
-
-Once `HUMAN-PROOF` is valid, the same request may receive an x402 challenge.
-The final retry carries both proofs. Neither protocol reinterprets or weakens
-the other.
-
-## What is included
-
-- Canonical HTTP requirement/result codecs and request digests.
-- Exact audience, purpose, nonce, time, and caller binding.
-- Explicit provider alternatives without cross-provider equivalence.
-- Provider-local global, relying-party, action, and session scopes.
-- Ed25519 `x424-result+jws` signing and deterministic fail-closed evaluation.
-- Atomic-store interfaces for challenge and mutation-result replay protection.
-- Provider-adapter SDK and static conformance inspection.
-- World ID 4.0 Orb reference adapter.
-- Express reference router, OpenAPI 3.1, JSON Schemas, and MCP server.
-- Fixed positive and negative cross-implementation conformance vectors.
-- A no-build browser dependency console.
-
-The repository does not contain a hosted verifier, production datastore,
-production relying-party key, on-chain registry, identity wallet, generic
-credential protocol, cross-provider deduplication system, or authorization
-engine.
+x424 can bind a result to an agent public-key fingerprint for one request or
+narrow purpose. It does not label the agent as human or prove ownership,
+delegation, competence, authority, or continued control. Durable human-agent
+relationships belong in a separate consent, mandate, recovery, and revocation
+system.
 
 ## Repository map
 
 ```text
-src/                   Provider-neutral core and integration surfaces
-src/providers/         Explicit provider reference adapters
-schemas/               JSON Schema 2020-12 wire contracts
-conformance/           Fixed cross-implementation vectors
-openapi/               OpenAPI 3.1 reference contract
-demo/                  Provider-safe dependency console
-examples/              Generic HTTP and adapter examples
-test/                  Core, security, conformance, MCP, and contract tests
-docs/PROTOCOL.md        Normative x424/0.1 contract
-docs/ARCHITECTURE.md    Trust boundaries and deployment shapes
-docs/ADOPTION.md        Generic relying-party adoption and migration
-docs/SECURITY.md        Threat model and production controls
-docs/COMPOSITION.md     x401/x402 and on/off-chain composition
-docs/GOVERNANCE.md      Neutral change control and stable 1.0 gates
-docs/STANDARDS_PROFILE.md  Standards boundaries and roadmap
+src/                     Core, provider profiles, Redis state, HTTP, and MCP
+schemas/                 JSON Schema 2020-12 wire contracts
+conformance/             Fixed cross-implementation vectors
+openapi/                 OpenAPI 3.1 verifier contract
+demo/                    Provider-safe dependency console
+examples/                Generic HTTP and provider-adapter examples
+test/                    Core, security, provider, Redis, and contract tests
+docs/PROTOCOL.md          Normative x424/0.1 contract
+docs/ADOPTER_CONTRACT.md  Off-the-shelf responsibility boundary
+docs/ROADMAP.md           Release and standards-readiness gates
+docs/SECURITY.md          Threat model and production controls
+docs/GOVERNANCE.md        Neutral change control and stable 1.0 gates
 ```
 
-## Status
+## Contributing
 
-x424/0.1 is a public pre-alpha candidate protocol, not an IETF standard. HTTP
-424 is specified by RFC 4918 for WebDAV dependency failures; clients detect
-x424 through `HUMAN-REQUIRED` and the supported payload version, not the status
-or reason phrase alone.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Protocol changes must state security
+and compatibility impact and update negative vectors. Provider contributions
+must include provider-native positive and negative fixtures.
 
-The reference release is unaudited. Do not use the in-memory stores or
-reference router to protect production access or value. Read
-[`docs/SECURITY.md`](docs/SECURITY.md) and report vulnerabilities privately as
-described in [`SECURITY.md`](SECURITY.md).
+## Security and license
 
-Apache-2.0. See [`LICENSE`](LICENSE).
+The reference release is unaudited. Do not use in-memory stores or the
+reference router alone to protect production access or value. Read
+[docs/SECURITY.md](docs/SECURITY.md) and report vulnerabilities through
+[SECURITY.md](SECURITY.md).
+
+Apache-2.0. See [LICENSE](LICENSE).

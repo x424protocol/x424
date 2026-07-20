@@ -42,9 +42,9 @@ describe("x424 MCP server", () => {
         accepts: [
           {
             providerId: "world",
-            methodId: "world-id-4-orb",
+            methodId: "proof-of-human",
             descriptorVersion: "1",
-            assuranceLevel: "orb",
+            assuranceLevel: "proof-of-human",
             acceptedScopeKinds: ["action"],
           },
         ],
@@ -65,7 +65,7 @@ describe("x424 MCP server", () => {
     expect(inspected.structuredContent).toMatchObject({
       purpose: "test-action",
       bindingKind: "agent_key",
-      acceptedMethods: ["world:world-id-4-orb@1"],
+      acceptedMethods: ["world:proof-of-human@1"],
     });
 
     const resources = await client.listResources();

@@ -244,16 +244,16 @@ SHOULD also require an `Idempotency-Key` so a lost success response can be
 retried without duplicating the business action. The application must define
 whether the same result may cover safe reads, a batch, or exactly one mutation.
 
-## 10. Reference provider profile: World ID 4 Orb
+## 10. Reference provider profile: World Proof of Human
 
 This profile is non-normative for x424 core. It demonstrates how one concrete
 provider method preserves native claims and non-claims without adding provider
 fields to the wire protocol.
 
-Identifier: `world:world-id-4-orb@1`.
+Identifier: `world:proof-of-human@1`.
 
-Positive claim: World accepted a World ID 4.0 `proof_of_human` uniqueness proof
-backed by the Orb credential schema for the configured RP and action.
+Positive claim: World accepted its Proof of Human uniqueness method for the
+configured RP and action.
 
 Mandatory non-claims include civil identity, demographic attributes,
 continuous presence, agent/wallet ownership, broad authorization, and
@@ -263,12 +263,18 @@ Profile rules:
 
 - RP ID uses the current `rp_...` namespace.
 - Native signed request material and action are generated on the backend.
+- The x424 binding value is the World signal; the adapter checks its provider
+  hash before calling the remote verifier.
 - The exact IDKit result is forwarded to `POST /api/v4/verify/{rp_id}` without
   proof-field reshaping.
-- The adapter requires an application-supplied local binding validator because
-  remote acceptance alone does not prove the x424 caller binding.
+- The profile accepts only the current v4 `proof_of_human` credential. It
+  rejects legacy credentials because v3 and v4 nullifiers cannot be treated as
+  one human without an explicit cross-version deduplication contract.
 - The provider nullifier remains private and is never returned.
 - The method's uniqueness scope is `action` in profile 1.
+- The World action, not the x424 dependency ID or signal, defines the native
+  one-human participation namespace. Reusing an action does not create fresh
+  eligibility for each HTTP request.
 - Verification mode is `backend`.
 - World session proof continuity is not substituted for uniqueness proof.
 - One-time uniqueness nullifiers mean deletion does not necessarily permit a

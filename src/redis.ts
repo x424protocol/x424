@@ -1,0 +1,175 @@
+import { canonicalJson } from "./canonical.js";
+import { parseHumanRequirement } from "./schemas.js";
+import type {
+  HumanRequirement,
+  IsoTimestamp,
+  NonceStore,
+  RequirementStore,
+  ResultReplayStore,
+} from "./types.js";
+
+/** Minimal command surface implemented by the official `redis` client. */
+export interface RedisCommandClient {
+  sendCommand(arguments_: readonly string[]): Promise<unknown>;
+}
+
+export interface RedisX424StoreOptions {
+  readonly client: RedisCommandClient;
+  readonly keyPrefix?: string;
+}
+
+const CONSUME_NONCE_SCRIPT = [
+  "local value = redis.call('GET', KEYS[1])",
+  "if value == ARGV[1] then",
+  "  redis.call('DEL', KEYS[1])",
+  "  return 1",
+  "end",
+  "return 0",
+].join("\n");
+
+/**
+ * Shared Redis 6.2+ state for a production-shaped x424 verifier.
+ *
+ * The class uses raw Redis commands so adopters can pass the official
+ * `createClient()` result without coupling x424 core to a Redis package
+ * version. Challenge consumption and result replay checks are atomic.
+ */
+export class RedisX424Store {
+  readonly #client: RedisCommandClient;
+  readonly #prefix: string;
+  readonly nonces: NonceStore;
+  readonly requirements: RequirementStore;
+  readonly results: ResultReplayStore;
+
+  constructor(options: RedisX424StoreOptions) {
+    const prefix = options.keyPrefix ?? "x424";
+    if (!prefix || /[\s\u0000]/u.test(prefix)) {
+      throw new Error("Redis keyPrefix must be a non-empty token");
+    }
+    this.#client = options.client;
+    this.#prefix = prefix;
+    this.nonces = Object.freeze({
+      put: (dependencyId: string, nonce: string, expiresAt: IsoTimestamp) =>
+        this.#putNonce(dependencyId, nonce, expiresAt),
+      consume: (dependencyId: string, nonce: string) =>
+        this.#consumeNonce(dependencyId, nonce),
+    });
+    this.requirements = Object.freeze({
+      put: (requirement: HumanRequirement) => this.#putRequirement(requirement),
+      get: (dependencyId: string, now?: Date) =>
+        this.#getRequirement(dependencyId, now),
+      delete: (dependencyId: string) => this.#deleteRequirement(dependencyId),
+    });
+    this.results = Object.freeze({
+      consume: (resultId: string, expiresAt: IsoTimestamp, now?: Date) =>
+        this.#consumeResult(resultId, expiresAt, now),
+    });
+  }
+
+  async #putNonce(
+    dependencyId: string,
+    nonce: string,
+    expiresAt: IsoTimestamp,
+  ): Promise<void> {
+    if (!nonce) throw new Error("Invalid nonce entry");
+    await this.#setOnce(
+      this.#key("nonce", dependencyId),
+      nonce,
+      expiresAt,
+      "Dependency ID already exists",
+    );
+  }
+
+  async #consumeNonce(dependencyId: string, nonce: string): Promise<boolean> {
+    const response = await this.#client.sendCommand([
+      "EVAL",
+      CONSUME_NONCE_SCRIPT,
+      "1",
+      this.#key("nonce", dependencyId),
+      nonce,
+    ]);
+    return response === 1 || response === "1";
+  }
+
+  async #putRequirement(requirement: HumanRequirement): Promise<void> {
+    await this.#setOnce(
+      this.#key("requirement", requirement.dependencyId),
+      canonicalJson(requirement),
+      requirement.expiresAt,
+      "Dependency ID already exists",
+    );
+  }
+
+  async #getRequirement(
+    dependencyId: string,
+    now = new Date(),
+  ): Promise<HumanRequirement | undefined> {
+    const value = await this.#client.sendCommand([
+      "GET",
+      this.#key("requirement", dependencyId),
+    ]);
+    if (typeof value !== "string") return undefined;
+    const requirement = parseHumanRequirement(JSON.parse(value));
+    if (Date.parse(requirement.expiresAt) <= now.getTime()) {
+      await this.#deleteRequirement(dependencyId);
+      return undefined;
+    }
+    return requirement;
+  }
+
+  async #deleteRequirement(dependencyId: string): Promise<void> {
+    await this.#client.sendCommand([
+      "DEL",
+      this.#key("requirement", dependencyId),
+    ]);
+  }
+
+  async #consumeResult(
+    resultId: string,
+    expiresAt: string,
+    now = new Date(),
+  ): Promise<boolean> {
+    const expiresAtMs = this.#futureExpiry(expiresAt, now);
+    if (expiresAtMs === undefined) return false;
+    const response = await this.#client.sendCommand([
+      "SET",
+      this.#key("result", resultId),
+      "1",
+      "NX",
+      "PXAT",
+      String(expiresAtMs),
+    ]);
+    return response === "OK";
+  }
+
+  async #setOnce(
+    key: string,
+    value: string,
+    expiresAt: IsoTimestamp,
+    duplicateMessage: string,
+  ): Promise<void> {
+    const expiresAtMs = this.#futureExpiry(expiresAt, new Date());
+    if (expiresAtMs === undefined) throw new Error("Invalid or expired entry");
+    const response = await this.#client.sendCommand([
+      "SET",
+      key,
+      value,
+      "NX",
+      "PXAT",
+      String(expiresAtMs),
+    ]);
+    if (response !== "OK") throw new Error(duplicateMessage);
+  }
+
+  #futureExpiry(expiresAt: IsoTimestamp, now: Date): number | undefined {
+    const expiresAtMs = Date.parse(expiresAt);
+    return Number.isFinite(expiresAtMs) && expiresAtMs > now.getTime()
+      ? expiresAtMs
+      : undefined;
+  }
+
+  #key(kind: "nonce" | "requirement" | "result", id: string): string {
+    if (!id) throw new Error("x424 store ID is required");
+    return `${this.#prefix}:${kind}:${id}`;
+  }
+}

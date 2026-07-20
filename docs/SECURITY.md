@@ -61,16 +61,23 @@ production access or value.
   signing key to a browser, public environment variable, log, or MCP tool.
 - Forward the exact IDKit result to World's current v4 verifier; do not trim,
   convert, or rebuild native proof fields.
-- Validate protocol version, environment, RP/action, Orb credential method, and
-  the exact application signal/binding before accepting remote success.
-- Treat World remote success as provider proof validity, not x424 caller
-  binding. The required `validateBinding` callback must independently enforce
-  the relying-party binding semantics.
+- Validate protocol version, environment, RP/action, credential identifier,
+  nonce, and the exact application signal/binding before accepting remote
+  success.
+- The reference adapter binds the World signal to the x424 binding. Applications
+  may add a `validateBinding` callback for stricter session or account policy;
+  the callback never weakens the built-in check.
+- Reject legacy credentials in the current Proof of Human profile. World v3
+  and v4 credentials can have different nullifiers, so accepting both under one
+  method can violate one-human-one-action semantics.
 - Store uniqueness material using canonical representation and atomic unique
   constraints where the provider method requires replay detection.
 - World ID 4 uniqueness nullifiers are one-time. Local deletion cannot be
   assumed to reset provider eligibility; recovery must preserve or explicitly
   migrate the relying-party human namespace.
+- Treat each registered World action as a real uniqueness namespace. The x424
+  dependency ID and World signal bind context but do not make the same human
+  eligible again under a reused action.
 - Do not substitute session proof/`session_id` continuity for action-scoped
   uniqueness unless a separately versioned method explicitly permits it.
 
@@ -92,11 +99,12 @@ use published vectors and compare byte-for-byte.
 
 ## Reference implementation limitations
 
-- `InMemoryNonceStore`, `InMemoryResultReplayStore`, and the API router's pending
-  map are single-process and lose state on restart.
+- `InMemoryNonceStore`, `InMemoryRequirementStore`, and
+  `InMemoryResultReplayStore` are single-process and lose state on restart.
+- `RedisX424Store` supplies atomic shared state, but production deployments must
+  still secure, monitor, back up, and test their Redis topology.
 - The router has no authentication, authorization, CORS policy, rate limiter,
   durable audit, or abuse control.
-- The World adapter delegates native signal checking to application code.
 - MCP tools intentionally do not accept raw provider proof material.
 - No independent audit, fuzz campaign, formal verification, or production load
   test has been completed.

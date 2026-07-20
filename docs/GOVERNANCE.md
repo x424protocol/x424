@@ -54,6 +54,8 @@ verification modes. Namespace assignment is not trademark or legal clearance.
   core wire objects.
 - Commercial services may implement x424, but conformance claims remain
   independently testable using public artifacts.
+- First adopters use public interfaces only and receive no hidden compatibility
+  path. See [ADOPTER_CONTRACT.md](ADOPTER_CONTRACT.md).
 
 ## Stable 1.0 gates
 
@@ -70,3 +72,4 @@ x424 should not declare a stable 1.0 profile until it has:
 After these gates, the maintainers should evaluate an appropriate neutral
 standards venue. Standards submission must preserve Apache-2.0 implementation
 rights and avoid granting any adopter or provider control over conformance.
+The staged execution plan is tracked in [ROADMAP.md](ROADMAP.md).

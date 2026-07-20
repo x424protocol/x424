@@ -1,9 +1,11 @@
 import {
   HUMAN_PROOF_HEADER,
   HUMAN_REQUIRED_HEADER,
+  HUMAN_RESULT_HEADER,
   decodeHumanRequirement,
 } from "./http.js";
-import type { HumanRequirement } from "./types.js";
+import { methodKey } from "./catalog.js";
+import { X424_VERSION, type HumanRequirement } from "./types.js";
 
 export interface HumanDependencyResolution {
   /** Signed x424-result+jws token returned by a trusted verifier. */
@@ -18,6 +20,83 @@ export type HumanDependencyResolver = (input: {
 export interface X424FetchOptions {
   readonly resolveHumanDependency: HumanDependencyResolver;
   readonly fetchImplementation?: typeof fetch;
+}
+
+export interface ProviderProofResolution {
+  readonly providerId: string;
+  readonly methodId: string;
+  readonly descriptorVersion: string;
+  readonly nativeProof: unknown;
+}
+
+export type ProviderProofResolver = (input: {
+  readonly requirement: HumanRequirement;
+}) => Promise<ProviderProofResolution>;
+
+export interface HttpHumanDependencyResolverOptions {
+  /** Base URL of the trusted x424 verifier. */
+  readonly verifierUrl: string | URL;
+  /** Runs the selected provider UI or wallet ceremony. */
+  readonly resolveProviderProof: ProviderProofResolver;
+  readonly fetchImplementation?: typeof fetch;
+  readonly headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
+}
+
+/**
+ * Compose a provider ceremony with the standard verifier submission. Adopters
+ * supply provider UI and credentials; this helper owns x424 submission,
+ * method checks, and extraction of the signed result token.
+ */
+export function createHttpHumanDependencyResolver(
+  options: HttpHumanDependencyResolverOptions,
+): HumanDependencyResolver {
+  return async ({ requirement }) => {
+    const resolved = await options.resolveProviderProof({ requirement });
+    const accepted = requirement.accepts.some(
+      (method) =>
+        methodKey(method.providerId, method.methodId) ===
+          methodKey(resolved.providerId, resolved.methodId) &&
+        method.descriptorVersion === resolved.descriptorVersion,
+    );
+    if (!accepted) {
+      throw new Error("Provider resolver selected an unaccepted human method");
+    }
+
+    const base = new URL(options.verifierUrl);
+    if (!base.pathname.endsWith("/")) base.pathname += "/";
+    const endpoint = new URL(
+      `v1/requirements/${encodeURIComponent(requirement.dependencyId)}/verify`,
+      base,
+    );
+    const configuredHeaders =
+      typeof options.headers === "function"
+        ? await options.headers()
+        : options.headers;
+    const headers = new Headers(configuredHeaders);
+    headers.set("content-type", "application/json");
+    const response = await (options.fetchImplementation ?? fetch)(
+      new Request(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          x424Version: X424_VERSION,
+          dependencyId: requirement.dependencyId,
+          providerId: resolved.providerId,
+          methodId: resolved.methodId,
+          binding: requirement.binding,
+          nativeProof: resolved.nativeProof,
+        }),
+      }),
+    );
+    if (!response.ok) {
+      throw new Error(`x424 verifier rejected the proof (${response.status})`);
+    }
+    const humanProof = response.headers.get(HUMAN_RESULT_HEADER);
+    if (!humanProof) {
+      throw new Error("x424 verifier omitted HUMAN-RESULT");
+    }
+    return { humanProof };
+  };
 }
 
 /**

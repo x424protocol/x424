@@ -1,0 +1,68 @@
+import {
+  IDKit,
+  proofOfHuman,
+  type IDKitResult,
+  type WaitOptions,
+} from "@worldcoin/idkit-core";
+import type { ProviderProofResolver } from "../client.js";
+import {
+  createWorldIdProofResolver,
+  type WorldIdProviderRequest,
+} from "./world-id.js";
+
+export interface WorldIdProofRequest {
+  readonly connectorUri: string;
+  collect(options?: WaitOptions): Promise<IDKitResult>;
+}
+
+/** Build the current IDKit Proof of Human request from x424 provider material. */
+export async function createWorldIdProofRequest(
+  providerRequest: WorldIdProviderRequest,
+): Promise<WorldIdProofRequest> {
+  const request = await IDKit.request({
+    app_id: providerRequest.appId as `app_${string}`,
+    action: providerRequest.action,
+    rp_context: providerRequest.rpContext,
+    // v3 and v4 credentials have different nullifiers. A single x424 method
+    // must never accept both without a cross-version deduplication contract.
+    allow_legacy_proofs: false,
+    environment: providerRequest.environment,
+  }).preset(proofOfHuman({ signal: providerRequest.signal }));
+
+  return {
+    connectorUri: request.connectorURI,
+    collect: async (options) => {
+      const completion = await request.pollUntilCompletion(options);
+      if (!completion.success) {
+        throw new Error(`World ID proof failed (${completion.error})`);
+      }
+      return completion.result;
+    },
+  };
+}
+
+export interface WorldIdIdKitResolverOptions {
+  /** Display, deep-link, or otherwise hand the connector URI to the human. */
+  readonly onConnectorUri?: (input: {
+    readonly connectorUri: string;
+    readonly providerRequest: WorldIdProviderRequest;
+  }) => void | Promise<void>;
+  readonly wait?: WaitOptions;
+}
+
+/**
+ * Complete the World provider ceremony with IDKit and return the exact native
+ * proof shape expected by the x424 verifier.
+ */
+export function createWorldIdIdKitProofResolver(
+  options: WorldIdIdKitResolverOptions = {},
+): ProviderProofResolver {
+  return createWorldIdProofResolver(async ({ providerRequest }) => {
+    const proofRequest = await createWorldIdProofRequest(providerRequest);
+    await options.onConnectorUri?.({
+      connectorUri: proofRequest.connectorUri,
+      providerRequest,
+    });
+    return proofRequest.collect(options.wait);
+  });
+}
