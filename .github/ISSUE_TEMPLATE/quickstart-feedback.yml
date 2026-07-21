@@ -1,0 +1,58 @@
+name: Quickstart feedback
+description: Tell us where the ten-minute local flow worked, failed, or became confusing.
+title: "quickstart: "
+labels: ["documentation", "quickstart"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying x424. Friction reports are contributions—you do not need to diagnose or fix the problem.
+        Never include real proofs, nullifiers, API keys, signing keys, or production data.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include your operating system, Node.js version, and pnpm version.
+      placeholder: macOS 15, Node.js 22.17, pnpm 9.12
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Completed successfully
+        - Completed with confusing steps
+        - Did not complete
+    validations:
+      required: true
+  - type: input
+    id: duration
+    attributes:
+      label: Time spent
+      placeholder: About 8 minutes
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: What happened?
+      description: Tell us the first place you hesitated, became confused, or encountered an error.
+      placeholder: I expected..., but instead...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Safe diagnostic output
+      description: Paste only non-sensitive output that helps reproduce the problem.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sensitive-data check
+      options:
+        - label: I removed proofs, nullifiers, keys, tokens, private subjects, and production data.
+          required: true

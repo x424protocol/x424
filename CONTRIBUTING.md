@@ -4,6 +4,41 @@ x424 is dependency infrastructure, not a generic identity stack. Contributions
 should make unique-human requirements more exact, portable, private, or
 fail-closed.
 
+## Ways to contribute
+
+You do not need protocol, identity, or cryptography expertise to help. Useful
+first contributions include:
+
+- run the [ten-minute quickstart](docs/QUICKSTART.md) and report where it was
+  confusing, slow, or surprising;
+- improve an example, error message, or framework integration;
+- review the HTTP or OpenAPI contract as an API consumer;
+- implement a small decoder against the fixed conformance vectors;
+- add platform coverage for an environment you use; or
+- help turn a provider proposal into explicit claims, non-claims, and negative
+  fixtures.
+
+Look for [`good first issue`](https://github.com/x424protocol/x424/labels/good%20first%20issue)
+or [`help wanted`](https://github.com/x424protocol/x424/labels/help%20wanted).
+If an issue looks too large, comment with the part you want to attempt and a
+maintainer will help make the boundary smaller. A report that only identifies
+friction is a useful contribution; you do not have to arrive with a fix.
+
+Maintainers aim to acknowledge new contributor issues and pull requests within
+three working days. If that does not happen, a polite follow-up is welcome.
+
+## Your first pull request
+
+1. Comment on an issue or open a small proposal so work is not duplicated.
+2. Fork the repository and create a focused branch.
+3. Run `pnpm install` and `pnpm check`.
+4. Make the smallest change that satisfies the issue's definition of done.
+5. Open a pull request and mention the issue it addresses.
+
+Draft pull requests are welcome when you want early feedback. Maintainers will
+help with protocol-specific tests and documentation when the contribution is
+otherwise well scoped.
+
 ## Development
 
 ```bash
