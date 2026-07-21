@@ -6,6 +6,8 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+## 0.1.0 - 2026-07-21
+
 ### Fixed
 
 - Closed the x424-before-x402 replay gap: mutation results now permit only the
