@@ -471,9 +471,16 @@ docs/GOVERNANCE.md        Neutral change control and stable 1.0 gates
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). Protocol changes must state security
-and compatibility impact and update negative vectors. Provider contributions
-must include provider-native positive and negative fixtures.
+You do not need protocol expertise to contribute. Run the quickstart and report
+friction, improve an example, review the API as a consumer, or choose a
+[`good first issue`](https://github.com/x424protocol/x424/labels/good%20first%20issue).
+Reports that identify confusing behavior are useful even without a proposed
+fix.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the first-pull-request path and
+development commands. Protocol changes must state security and compatibility
+impact and update negative vectors. Provider contributions must include
+provider-native positive and negative fixtures.
 
 ## Security and license
 
