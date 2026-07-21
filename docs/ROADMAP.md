@@ -53,7 +53,7 @@ every non-production component, and satisfy the public adopter contract.
 Purpose: make both self-hosted and managed verification operationally safe.
 
 - [x] Runnable non-root verifier image and Helm templates
-- [ ] Signed image, SBOM, and published artifact evidence
+- [x] Signed image, SBOM, and published artifact evidence
 - [x] Authenticated least-privilege issuance and verifier metadata
 - [x] Non-exportable signing and pairwise-derivation key interfaces
 - Tested key rotation, retirement, revocation, and compromise recovery

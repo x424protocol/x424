@@ -7,6 +7,15 @@ provider-subject digests, result replay markers, and rate limits in Redis; and
 same-operation result acceptances, encrypted brokered handoffs, and rate limits
 in Redis; and shuts down gracefully.
 
+The signed `0.1.0` evaluation image is public:
+
+```bash
+docker pull ghcr.io/x424protocol/x424-verifier@sha256:ccd5601aea7e5f568933d06a7948539e33b75a9d3a2b5ed5afdd6eb04590d84c
+```
+
+See the [0.1.0 release evidence](../../docs/program/RELEASE_0.1.0.md) for the
+source tag, workflow, provenance, SBOM, signature, and maturity boundary.
+
 ## Local evaluation
 
 Replace the staging World values in `docker-compose.yml`, then run:

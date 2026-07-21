@@ -124,6 +124,8 @@ certification or accepted global standard. The repository includes:
 - deterministic x424-before-x402 server and client composition with
   same-operation acceptance;
 - a runnable non-root Redis verifier image and Helm chart;
+- a signed public `ghcr.io/x424protocol/x424-verifier:0.1.0` image with
+  provenance and SBOM attestations;
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
 
@@ -135,7 +137,14 @@ making production or standards claims.
 
 ## Run the complete local flow
 
-The first npm release has not been published. The source quickstart exercises
+The one-time npm owner bootstrap is still pending. Install the signed-tag
+release artifact directly from GitHub:
+
+```bash
+npm install https://github.com/x424protocol/x424/releases/download/v0.1.0/x424-0.1.0.tgz
+```
+
+The source quickstart exercises
 `424 → provider proof → signed result → exact retry → 201` with synthetic World
 fixtures:
 
@@ -151,7 +160,7 @@ This is an automated local evaluation flow, not real World verification. Read
 the [ten-minute quickstart](docs/QUICKSTART.md) for what it proves and the path
 to World staging, self-hosted Redis, framework, and x402 integrations.
 
-After the first release, the supported install command will be:
+After npm owner bootstrap, the supported registry install command will be:
 
 ```bash
 pnpm add x424
