@@ -15,7 +15,7 @@ release gates remain in the [roadmap](ROADMAP.md) and
 | TypeScript SDK              | Implemented and locally tested       | Core, agent, handoff, framework, store, and package test suites  |
 | World profile               | Synthetic positive/negative coverage | v4 default, legacy opt-in, provider-request vectors              |
 | Framework adapters          | Implemented and locally tested       | Fetch, Express, and Next.js parity tests                         |
-| Self-hosted verifier        | Runnable evaluation profile          | Non-root image source, Compose, Redis, Helm templates            |
+| Self-hosted verifier        | Published signed evaluation profile  | Public image, provenance/SBOM attestations, Compose, Redis, Helm |
 | Managed-verifier interfaces | Implemented and locally tested       | Issuance, metadata, requirement, replay, acceptance, handoff     |
 | Agent key possession        | Implemented and locally tested       | Ed25519, EIP-191, ERC-1271, Content-Digest, exact retry nonce    |
 | Brokered human handoff      | Implemented with a World HA caveat   | Generic Redis/PostgreSQL CAS; public-IDKit process-local session |
@@ -54,7 +54,8 @@ universal human ID, an IETF standard, or an accepted global standard.
 
 ## Next release gates
 
-1. Publish a provenance-backed npm release and reproducibility record.
+1. Complete one-time npm owner bootstrap and publish the provenance-backed npm
+   package; the signed GitHub release and public verifier image are available.
 2. Run the ten-minute flow with unfamiliar developers using only public docs.
 3. Publish real World staging browser, mobile-web, REST, and agent-key evidence.
 4. Complete external wire-contract, security, and privacy review.
