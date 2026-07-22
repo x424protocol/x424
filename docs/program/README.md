@@ -15,6 +15,7 @@ SECURITY.md, ADOPTER_CONTRACT.md, then ROADMAP.md.
 | [THREAT_DATA_FLOW.md](THREAT_DATA_FLOW.md)         | P0-02       | Roles, trust boundaries, sensitive data flows    |
 | [REQUIREMENT_IDS.md](REQUIREMENT_IDS.md)           | P0-03       | Stable MUST/SHOULD identifiers and vector map    |
 | [DELIVERABLE_REGISTER.md](DELIVERABLE_REGISTER.md) | gates       | Status and evidence links by release gate        |
+| [RELEASE_0.1.2.md](RELEASE_0.1.2.md)               | 0.1 package | Provenance-backed registry and image release     |
 
 GitHub epics, issue labels, and named human owners require repository write
 authorization and cannot be fabricated here. Until authorized, this register is

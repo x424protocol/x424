@@ -12,7 +12,7 @@ release gates remain in the [roadmap](ROADMAP.md) and
 | Surface                     | State                                | Evidence                                                         |
 | --------------------------- | ------------------------------------ | ---------------------------------------------------------------- |
 | HTTP wire contract          | Implemented and locally tested       | Protocol, schemas, OpenAPI, conformance vectors                  |
-| TypeScript SDK              | Published npm developer preview      | Core, agent, handoff, framework, store, and package test suites  |
+| TypeScript SDK              | Published npm developer preview      | Provenance-backed `x424@0.1.2`, package and conformance tests    |
 | World profile               | Synthetic positive/negative coverage | v4 default, legacy opt-in, provider-request vectors              |
 | Framework adapters          | Implemented and locally tested       | Fetch, Express, and Next.js parity tests                         |
 | Self-hosted verifier        | Published signed evaluation profile  | Public image, provenance/SBOM attestations, Compose, Redis, Helm |
@@ -54,12 +54,13 @@ universal human ID, an IETF standard, or an accepted global standard.
 
 ## Next release gates
 
-1. Publish the provenance-backed `0.1.2` npm package from the signed tag; the
-   owner bootstrap, signed GitHub release, and public verifier image exist.
-2. Run the ten-minute flow with unfamiliar developers using only public docs.
-3. Publish real World staging browser, mobile-web, REST, and agent-key evidence.
-4. Complete external wire-contract, security, and privacy review.
-5. Publish signed verifier artifacts, SBOMs, and operational exercise results.
+1. Run the ten-minute flow with unfamiliar developers using only public docs.
+2. Publish real World staging browser, mobile-web, REST, and agent-key evidence.
+3. Complete external wire-contract, security, and privacy review.
+4. Publish verifier load, failover, backup/restore, and key-compromise exercise
+   results.
+5. Recruit independently operated implementations and unrelated production
+   adopters using only public surfaces.
 
 Gate completion requires immutable evidence links. Code or documentation alone
 cannot satisfy an external review, live operation, or independent adoption

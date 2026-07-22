@@ -1,6 +1,6 @@
 # Roadmap to an interoperable standard
 
-> Status snapshot: 2026-07-20
+> Status snapshot: 2026-07-22
 
 x424 makes unique humanity a native HTTP dependency—for users, agents, and
 APIs. The protocol earns adoption and standards credibility through public
@@ -41,7 +41,7 @@ without custom protocol code.
 - [x] Local self-hosted Redis/World quickstart source
 - [ ] Managed sandbox deployment and public credentials
 - [x] Provenance release workflow and packed-package smoke tests
-- [ ] Authorized npm publication, signed tag, and reproducibility record
+- [x] Authorized npm publication, signed tag, and reproducibility record
 - [ ] External review of the wire contract and threat model
 - [ ] Ten-minute sandbox validation with an unfamiliar developer
 
