@@ -14,9 +14,11 @@ production assessment, or independent-adoption gates.
 
 The workflow passed the complete repository check, quickstart, packed-package
 smoke test, image build, SBOM generation, image provenance attestation, SBOM
-attestation, and keyless image signature. Direct npm publication reached the
-registry with a Sigstore provenance statement but was rejected because the new
-unscoped package still requires one-time npm user-owner bootstrap.
+attestation, and keyless image signature. The initial workflow publication was
+rejected because the new unscoped package required one-time npm user-owner
+bootstrap. On 2026-07-22, the checksum-verified attached artifact was published
+as that owner-bootstrap release; subsequent releases use the provenance
+workflow.
 
 ## Package artifact
 
@@ -26,10 +28,10 @@ unscoped package still requires one-time npm user-owner bootstrap.
 
 The attached artifact was installed into a clean temporary project and its
 public `x424`, `core`, `client`, `world`, `express`, `fetch`, `next`, and `mcp`
-imports were loaded successfully. Until npm owner bootstrap is complete:
+imports were loaded successfully. The same artifact is available from npm:
 
 ```bash
-npm install https://github.com/x424protocol/x424/releases/download/v0.1.0/x424-0.1.0.tgz
+npm install x424@0.1.0
 ```
 
 ## Verifier image

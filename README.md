@@ -137,11 +137,10 @@ making production or standards claims.
 
 ## Run the complete local flow
 
-The one-time npm owner bootstrap is still pending. Install the signed-tag
-release artifact directly from GitHub:
+Install the public package from npm:
 
 ```bash
-npm install https://github.com/x424protocol/x424/releases/download/v0.1.0/x424-0.1.0.tgz
+pnpm add x424
 ```
 
 The source quickstart exercises
@@ -159,12 +158,6 @@ pnpm quickstart
 This is an automated local evaluation flow, not real World verification. Read
 the [ten-minute quickstart](docs/QUICKSTART.md) for what it proves and the path
 to World staging, self-hosted Redis, framework, and x402 integrations.
-
-After npm owner bootstrap, the supported registry install command will be:
-
-```bash
-pnpm add x424
-```
 
 The repository requires Node.js 22+ and pnpm 9+.
 

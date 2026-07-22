@@ -1,6 +1,6 @@
 # Public release-gate evidence
 
-Updated: 2026-07-21
+Updated: 2026-07-22
 
 Status values: `complete` | `partial` | `externally_blocked` | `not_started`.
 A document or local test is not independent evidence. Never invent reviewers,
@@ -9,7 +9,7 @@ approvals, deployments, adopters, or artifact URLs.
 | Gate                     | Status             | Repository evidence                                        | Missing external evidence                                         |
 | ------------------------ | ------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------- |
 | 0.1 wire and schemas     | partial            | protocol, schemas, OpenAPI, vectors, security regressions  | independent design/threat review                                  |
-| 0.1 package              | partial            | signed tag, GitHub tarball/checksum, pack smoke            | one-time npm owner bootstrap and registry publication             |
+| 0.1 package              | partial            | signed tag, GitHub tarball/checksum, npm owner bootstrap   | provenance-backed `0.1.1` registry publication record             |
 | 0.1 developer experience | partial            | automated one-command flow, World and HTTP examples        | managed sandbox and timed unfamiliar-developer run                |
 | 0.2 self-hosted verifier | partial            | public signed image, SBOM/provenance, Helm, key interfaces | Docker/Helm runtime exercises and independent assessment          |
 | 0.2 managed verifier     | partial            | public issuance/state/replay client and OpenAPI            | separate conforming service, console, tenant/security review      |
