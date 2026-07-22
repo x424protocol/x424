@@ -6,6 +6,14 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+## 0.1.2 - 2026-07-22
+
+### Fixed
+
+- Updated the release runner to Node.js 24 and npm 11.16 so the npm trusted
+  publisher can exchange GitHub OIDC credentials and publish provenance-backed
+  packages.
+
 ## 0.1.1 - 2026-07-22
 
 ### Security

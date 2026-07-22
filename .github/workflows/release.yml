@@ -21,9 +21,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 22
-          cache: pnpm
+          node-version: 24
           registry-url: https://registry.npmjs.org
+
+      - name: Install trusted-publishing npm
+        run: npm install --global npm@11.16.0
 
       - name: Match tag to package version
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"

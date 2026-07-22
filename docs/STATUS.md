@@ -54,7 +54,7 @@ universal human ID, an IETF standard, or an accepted global standard.
 
 ## Next release gates
 
-1. Publish the provenance-backed `0.1.1` npm package from the signed tag; the
+1. Publish the provenance-backed `0.1.2` npm package from the signed tag; the
    owner bootstrap, signed GitHub release, and public verifier image exist.
 2. Run the ten-minute flow with unfamiliar developers using only public docs.
 3. Publish real World staging browser, mobile-web, REST, and agent-key evidence.

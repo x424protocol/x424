@@ -145,7 +145,7 @@ function toolError(_error: unknown) {
 }
 
 export function createX424McpServer(): McpServer {
-  const server = new McpServer({ name: "x424-mcp-server", version: "0.1.1" });
+  const server = new McpServer({ name: "x424-mcp-server", version: "0.1.2" });
 
   server.registerTool(
     "x424_inspect_requirement",
