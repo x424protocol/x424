@@ -100,7 +100,7 @@ try {
   const payload = await response.json();
   if (
     payload?.result?.serverInfo?.name !== "x424-mcp-server" ||
-    payload?.result?.serverInfo?.version !== "0.1.1" ||
+    payload?.result?.serverInfo?.version !== "0.1.2" ||
     payload?.result?.protocolVersion !== "2025-11-25"
   ) {
     throw new Error("MCP initialize returned an unexpected response");
