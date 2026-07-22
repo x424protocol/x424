@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { HUMAN_METHOD_IDENTIFIER_PATTERN } from "../catalog.js";
 import {
@@ -145,7 +145,7 @@ function toolError(_error: unknown) {
 }
 
 export function createX424McpServer(): McpServer {
-  const server = new McpServer({ name: "x424-mcp-server", version: "0.1.0" });
+  const server = new McpServer({ name: "x424-mcp-server", version: "0.1.1" });
 
   server.registerTool(
     "x424_inspect_requirement",
