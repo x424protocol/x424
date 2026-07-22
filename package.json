@@ -152,7 +152,7 @@
     "express": "^5.2.1",
     "qrcode": "^1.5.4",
     "redis": "^6.1.0",
-    "viem": "^2.55.4",
+    "viem": "^2.55.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {
