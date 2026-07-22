@@ -12,7 +12,7 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
       '@worldcoin/idkit-core':
-        specifier: ^4.2.2
+        specifier: 4.2.2
         version: 4.2.2
       express:
         specifier: ^5.2.1

@@ -146,7 +146,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@worldcoin/idkit-core": "^4.2.2",
+    "@worldcoin/idkit-core": "4.2.2",
     "express": "^5.2.1",
     "qrcode": "^1.5.4",
     "redis": "^6.1.0",
