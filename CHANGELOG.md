@@ -6,6 +6,15 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+## 0.1.1 - 2026-07-22
+
+### Security
+
+- Migrated the MCP server to the split v2 SDK and a bounded Web Standard HTTP
+  adapter, removing the vulnerable Hono server dependency while preserving
+  stdio and stateless HTTP transports. The release gate now exercises MCP HTTP
+  initialization and rejects untrusted Host headers.
+
 ## 0.1.0 - 2026-07-21
 
 ### Fixed

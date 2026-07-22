@@ -1,6 +1,6 @@
 {
   "name": "x424",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs.",
   "license": "Apache-2.0",
   "homepage": "https://x424.org",
@@ -11,6 +11,7 @@
   "bugs": {
     "url": "https://github.com/x424protocol/x424/issues"
   },
+  "mcpName": "io.github.x424protocol/x424",
   "keywords": [
     "x424",
     "human-verification",
@@ -120,12 +121,13 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build && pnpm mcp:http:smoke",
     "conformance": "vitest run test/provider-sdk.test.ts test/conformance.test.ts && pnpm build && node dist/conformance/cli.js",
     "example": "tsx examples/http-flow.ts",
     "image:smoke": "node scripts/image-smoke.mjs",
     "mcp": "tsx src/mcp/cli.ts",
     "mcp:http": "X424_MCP_TRANSPORT=http tsx src/mcp/cli.ts",
+    "mcp:http:smoke": "node scripts/mcp-http-smoke.mjs",
     "quickstart": "node scripts/run-quickstart.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -145,7 +147,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/server": "^2.0.0-beta.5",
     "@worldcoin/idkit-core": "4.2.2",
     "express": "^5.2.1",
     "qrcode": "^1.5.4",
@@ -154,6 +156,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0-beta.5",
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
     "@types/qrcode": "^1.5.5",
