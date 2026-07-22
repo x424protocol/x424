@@ -168,7 +168,7 @@
     "ajv-formats": "^3.0.1",
     "prettier": "^3.6.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.0"
   }
 }
