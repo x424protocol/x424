@@ -9,7 +9,7 @@ import type { HumanProviderHandoffAdapter } from "../handoff.js";
 import {
   createWorldIdProofResolver,
   type WorldIdProviderRequest,
-} from "./world-id.js";
+} from "./world-id-shared.js";
 
 export interface WorldIdProofRequest {
   readonly connectorUri: string;

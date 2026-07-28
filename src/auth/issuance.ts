@@ -3,6 +3,8 @@
  * Missing grants deny. Authentication alone never grants arbitrary issuance.
  */
 
+import { createHash } from "node:crypto";
+
 export type DeploymentProfile =
   "dev-local-0.1" | "eval-redis-0.2" | "prod-ha-0.2";
 
@@ -72,9 +74,168 @@ function isDevWildcard(
   principal: AnyIssuancePrincipal,
 ): principal is DevWildcardIssuancePrincipal {
   return (
-    "__devWildcardIssuance" in principal &&
-    principal.__devWildcardIssuance === true
+    Object.prototype.hasOwnProperty.call(principal, "__devWildcardIssuance") &&
+    (principal as Partial<DevWildcardIssuancePrincipal>)
+      .__devWildcardIssuance === true
   );
+}
+
+const MAXIMUM_BEARER_TOKEN_LENGTH = 4_096;
+const MAXIMUM_PRINCIPAL_STRING_LENGTH = 2_048;
+const BEARER_TOKEN_PATTERN = /^[A-Za-z0-9\-._~+/]{1,4096}={0,2}$/u;
+const PRINCIPAL_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
+
+function bearerCredentialDigest(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("base64url");
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function exactOwnKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): boolean {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
+function validatedPrincipalString(
+  value: unknown,
+  maximumLength = MAXIMUM_PRINCIPAL_STRING_LENGTH,
+): string | undefined {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > maximumLength ||
+    PRINCIPAL_CONTROL_CHARACTER_PATTERN.test(value)
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
+function validatedPrincipalStringArray(
+  value: unknown,
+): readonly string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings: string[] = [];
+  for (const entry of value) {
+    const string = validatedPrincipalString(entry);
+    if (string === undefined) return undefined;
+    strings.push(string);
+  }
+  return Object.freeze(strings);
+}
+
+/**
+ * Validate and snapshot an authenticator result before it crosses a trust
+ * boundary. The returned principal contains own data properties only and
+ * cannot be changed by mutating the authenticator's source configuration.
+ */
+export function validateIssuancePrincipal(
+  input: unknown,
+): AnyIssuancePrincipal {
+  const invalid = () =>
+    new IssuanceAuthorizationError(
+      "UNAUTHENTICATED",
+      "Authenticated issuer principal is invalid",
+    );
+  if (!isPlainRecord(input)) throw invalid();
+  const subject = validatedPrincipalString(
+    hasOwn(input, "subject") ? input.subject : undefined,
+    512,
+  );
+  if (subject === undefined) throw invalid();
+
+  if (
+    hasOwn(input, "__devWildcardIssuance") &&
+    input.__devWildcardIssuance === true
+  ) {
+    if (!exactOwnKeys(input, ["subject", "__devWildcardIssuance"])) {
+      throw invalid();
+    }
+    return Object.freeze({
+      subject,
+      __devWildcardIssuance: true,
+    });
+  }
+
+  const allowedKeys = [
+    "subject",
+    "issuer",
+    "allowedPurposes",
+    "allowedAudiences",
+    "allowedHttpMethods",
+    "allowedMethods",
+    "allowedResources",
+  ] as const;
+  if (!exactOwnKeys(input, allowedKeys)) throw invalid();
+  for (const required of [
+    "allowedPurposes",
+    "allowedAudiences",
+    "allowedHttpMethods",
+    "allowedMethods",
+    "allowedResources",
+  ] as const) {
+    if (!hasOwn(input, required)) throw invalid();
+  }
+
+  const issuer = hasOwn(input, "issuer")
+    ? validatedPrincipalString(input.issuer)
+    : undefined;
+  if (hasOwn(input, "issuer") && issuer === undefined) throw invalid();
+  const allowedPurposes = validatedPrincipalStringArray(input.allowedPurposes);
+  const allowedAudiences = validatedPrincipalStringArray(
+    input.allowedAudiences,
+  );
+  const allowedHttpMethods = validatedPrincipalStringArray(
+    input.allowedHttpMethods,
+  );
+  const allowedMethods = validatedPrincipalStringArray(input.allowedMethods);
+  if (
+    !allowedPurposes ||
+    !allowedAudiences ||
+    !allowedHttpMethods ||
+    !allowedMethods ||
+    !Array.isArray(input.allowedResources)
+  ) {
+    throw invalid();
+  }
+  const allowedResources: ResourceUriGrant[] = [];
+  for (const entry of input.allowedResources) {
+    if (
+      !isPlainRecord(entry) ||
+      !exactOwnKeys(entry, ["origin", "pathPrefix"]) ||
+      !hasOwn(entry, "origin") ||
+      !hasOwn(entry, "pathPrefix")
+    ) {
+      throw invalid();
+    }
+    const origin = validatedPrincipalString(entry.origin);
+    const pathPrefix = validatedPrincipalString(entry.pathPrefix);
+    if (origin === undefined || pathPrefix === undefined) throw invalid();
+    allowedResources.push(Object.freeze({ origin, pathPrefix }));
+  }
+
+  return Object.freeze({
+    subject,
+    ...(issuer === undefined ? {} : { issuer }),
+    allowedPurposes,
+    allowedAudiences,
+    allowedHttpMethods,
+    allowedMethods,
+    allowedResources: Object.freeze(allowedResources),
+  });
 }
 
 export function normalizeHttpMethod(method: string): string {
@@ -151,6 +312,7 @@ export function authorizeIssuance(
   request: IssuanceAuthorizationRequest,
   profile: DeploymentProfile,
 ): void {
+  principal = validateIssuancePrincipal(principal);
   if (profile !== "dev-local-0.1") {
     let resource: URL;
     let audience: URL;
@@ -303,20 +465,37 @@ export function assertIssuanceRouterConfig(input: {
 export function createStaticBearerIssuanceAuthenticator(
   tokens: Readonly<Record<string, AnyIssuancePrincipal>>,
 ): IssuanceAuthenticator {
+  if (!isPlainRecord(tokens)) {
+    throw new Error("Static bearer credentials must be a plain record");
+  }
+  const credentialsByDigest = new Map<string, AnyIssuancePrincipal>();
+  for (const [token, configuredPrincipal] of Object.entries(tokens)) {
+    if (
+      token.length > MAXIMUM_BEARER_TOKEN_LENGTH ||
+      !BEARER_TOKEN_PATTERN.test(token)
+    ) {
+      throw new Error("Static bearer credential contains an invalid token");
+    }
+    const digest = bearerCredentialDigest(token);
+    if (credentialsByDigest.has(digest)) {
+      throw new Error("Static bearer credentials must be unique");
+    }
+    credentialsByDigest.set(
+      digest,
+      validateIssuancePrincipal(configuredPrincipal),
+    );
+  }
   return {
     async authenticate({ authorizationHeader }) {
-      if (!authorizationHeader?.startsWith("Bearer ")) {
+      const match = authorizationHeader?.match(
+        /^Bearer ([A-Za-z0-9\-._~+/]{1,4096}={0,2})$/iu,
+      );
+      const token = match?.[1] ?? "";
+      const principal = credentialsByDigest.get(bearerCredentialDigest(token));
+      if (!match || !principal) {
         throw new IssuanceAuthorizationError(
           "UNAUTHENTICATED",
-          "Bearer token required",
-        );
-      }
-      const token = authorizationHeader.slice("Bearer ".length).trim();
-      const principal = tokens[token];
-      if (!principal) {
-        throw new IssuanceAuthorizationError(
-          "UNAUTHENTICATED",
-          "Unknown bearer token",
+          "Bearer credentials are invalid",
         );
       }
       return principal;

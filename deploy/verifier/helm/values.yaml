@@ -1,18 +1,30 @@
-replicaCount: 2
+# World brokered handoff sessions are process-local. The chart deliberately
+# rejects replica counts above one until sessions are resumable or owner-routed.
+replicaCount: 1
 
 image:
   repository: ghcr.io/x424protocol/x424-verifier
-  tag: "0.1.0"
+  # Staged for the 0.1.3 release. Pin the published 0.1.3 digest before
+  # deploying valuable traffic; a tag is mutable.
+  tag: "0.1.3"
+  digest: ""
   pullPolicy: IfNotPresent
 
 service:
   port: 8080
 
 config:
-  deploymentProfile: prod-ha-0.2
+  # This single-instance chart is an evaluation surface, not evidence that the
+  # multi-instance prod-ha-0.2 profile has been satisfied.
+  deploymentProfile: eval-redis-0.2
   providerRequestMode: issuer
-  worldEnvironment: production
+  worldEnvironment: staging
   worldAllowLegacyProofs: "false"
+  # Redis Cluster is not supported by the 0.1.3 multi-key migration scripts.
+  redisTopology: single-endpoint
+  # Set this to the exact number of operator-controlled reverse-proxy hops.
+  # Leave zero when the verifier is reached directly.
+  trustProxyHops: 0
 
 secretName: x424-verifier
 
@@ -26,5 +38,14 @@ resources:
 
 networkPolicy:
   enabled: true
+  # Empty CIDR lists permit the corresponding port to any destination so the
+  # evaluation default is functional. The chart rejects empty lists when
+  # config.deploymentProfile is prod-ha-0.2.
+  dnsCidrs: []
+  worldPort: 443
   worldCidrs: []
+  redisPort: 6379
   redisCidrs: []
+
+podDisruptionBudget:
+  enabled: true

@@ -26,6 +26,10 @@ challenges. x424/0.1 needs an explicit, fail-closed transport profile.
 
 - Canonical challenge remains HTTP 424 + Problem Details +
   `Cache-Control: no-store, private` + `Vary: HUMAN-PROOF`.
+- Successful and rejected protected responses use
+  `Cache-Control: private, no-store`, include `HUMAN-PROOF` in `Vary`, and are
+  excluded from shared/CDN caches; otherwise a cached success could bypass
+  proof verification and replay enforcement.
 - **Inline envelope:** 8,192 UTF-8 bytes of the encoded header value.
 - Above the envelope, servers MUST NOT emit `HUMAN-REQUIRED`; they MUST set
   `x424Transport: "body"` and include the full `requirement` object in the

@@ -124,8 +124,8 @@ certification or accepted global standard. The repository includes:
 - deterministic x424-before-x402 server and client composition with
   same-operation acceptance;
 - a runnable non-root Redis verifier image and Helm chart;
-- a signed public `ghcr.io/x424protocol/x424-verifier:0.1.0` image with
-  provenance and SBOM attestations;
+- release automation for signed verifier images with provenance and SBOM
+  attestations;
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
 
@@ -239,8 +239,12 @@ request. Choose actions as real uniqueness domains.
 
 ## Shared verifier state
 
-The Express router accepts a shared `RequirementStore`. The Redis runtime
-provides requirement, dependency nonce, provider replay, and result stores
+Authenticated non-development routers require a shared
+`TenantIsolatedRequirementStore`; a generic ownerless `RequirementStore` is
+accepted only by the explicit local-development wildcard profile. Custom
+backends must atomically enforce the opaque tenant ID in `putForTenant`,
+`getForTenant`, and `deleteForTenant`. The Redis runtime implements that
+contract and provides dependency nonce, provider replay, and result stores
 through one configured client:
 
 ```ts
@@ -250,7 +254,10 @@ import { RedisX424Store } from "x424/redis";
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 
-const state = new RedisX424Store({ client: redis });
+const state = new RedisX424Store({
+  client: redis,
+  topology: "single-endpoint",
+});
 
 // X424Service({
 //   nonceStore: state.nonces,
@@ -261,8 +268,10 @@ const state = new RedisX424Store({ client: redis });
 // verifyHumanProofHeader({ replayStore: state.results, ... })
 ```
 
-Redis 6.2+ supplies atomic state; the operator still owns topology, access
-control, monitoring, backup, and failure testing.
+Redis 6.2+ on a single node or primary endpoint supplies atomic state; the
+operator still owns access control, monitoring, backup, and failure testing.
+Redis Cluster is rejected in 0.1.3 because the legacy/new-key cutover requires
+multi-key Lua and the pre-0.1.3 keys do not share a cluster hash slot.
 
 ## Client composition
 
@@ -295,6 +304,13 @@ supported order: initial `424`, human retry that may receive `402`, then a final
 retry carrying separate `HUMAN-PROOF` and `PAYMENT-SIGNATURE` headers. The
 server helpers keep humanity middleware before payment middleware and require
 normal application idempotency for mutations.
+
+The high-level `createFetchX424Handler()` applies the mandatory private,
+non-cacheable response headers to downstream application and x402 responses.
+If an integration calls `protectFetch()` or `protectFetchResource()` directly,
+it must pass every downstream response through
+`finalizeFetchX424Response(response, protection.responseHeaders)`. Returning a
+raw downstream `402` or success response bypasses that finalization boundary.
 
 ## Managed verifier configuration
 

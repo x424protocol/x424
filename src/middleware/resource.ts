@@ -9,6 +9,7 @@ import type {
   RequestHandler,
   Response as ExpressResponse,
 } from "express";
+import type { OutgoingHttpHeader, OutgoingHttpHeaders } from "node:http";
 import type { DeploymentProfile } from "../auth/issuance.js";
 import {
   bodyInputFromPlainJsonBody,
@@ -67,6 +68,104 @@ export type BodyInputExtractor = (input: {
   readonly url: string;
   readonly body: unknown;
 }) => RequestBodyDigestInput | Promise<RequestBodyDigestInput>;
+
+/** Protected responses must never be reusable by a shared or browser cache. */
+export const X424_PROTECTED_CACHE_CONTROL = "private, no-store" as const;
+
+function protectedFetchHeaders(
+  initial?: HeadersInit | Readonly<Record<string, string>>,
+): Headers {
+  const headers = new Headers(initial);
+  headers.set("cache-control", X424_PROTECTED_CACHE_CONTROL);
+  headers.set(
+    "vary",
+    mergeVary(headers.get("vary") ?? undefined, HUMAN_PROOF_HEADER),
+  );
+  return headers;
+}
+
+/**
+ * Keep Express response headers safe even if a downstream route tries to make
+ * the protected representation public-cacheable.
+ */
+function installExpressProtectedHeaders(response: ExpressResponse): void {
+  const guarded = response as ExpressResponse & {
+    __x424ProtectedHeadersInstalled?: boolean;
+  };
+  if (guarded.__x424ProtectedHeadersInstalled) return;
+  guarded.__x424ProtectedHeadersInstalled = true;
+
+  const originalSetHeader = response.setHeader.bind(response);
+  const originalRemoveHeader = response.removeHeader.bind(response);
+  const originalWriteHead = response.writeHead.bind(response);
+  const forceProtectedHeaders = () => {
+    originalSetHeader("cache-control", X424_PROTECTED_CACHE_CONTROL);
+    originalSetHeader(
+      "vary",
+      mergeVary(response.getHeader("vary"), HUMAN_PROOF_HEADER),
+    );
+  };
+  response.setHeader = ((name: string, value: unknown) => {
+    const lowerName = name.toLowerCase();
+    if (lowerName === "cache-control") {
+      return originalSetHeader(name, X424_PROTECTED_CACHE_CONTROL);
+    }
+    if (lowerName === "vary") {
+      return originalSetHeader(
+        name,
+        mergeVary(
+          response.getHeader("vary"),
+          String(value),
+          HUMAN_PROOF_HEADER,
+        ),
+      );
+    }
+    return originalSetHeader(
+      name,
+      value as string | number | readonly string[],
+    );
+  }) as typeof response.setHeader;
+
+  response.removeHeader = ((name: string) => {
+    const lowerName = name.toLowerCase();
+    if (lowerName === "cache-control" || lowerName === "vary") {
+      forceProtectedHeaders();
+      return;
+    }
+    originalRemoveHeader(name);
+  }) as typeof response.removeHeader;
+
+  response.writeHead = ((
+    statusCode: number,
+    statusMessageOrHeaders?:
+      string | OutgoingHttpHeaders | OutgoingHttpHeader[],
+    headers?: OutgoingHttpHeaders | OutgoingHttpHeader[],
+  ) => {
+    const directHeaders =
+      typeof statusMessageOrHeaders === "string"
+        ? headers
+        : statusMessageOrHeaders;
+    if (Array.isArray(directHeaders)) {
+      for (let index = 0; index < directHeaders.length; index += 2) {
+        const name = directHeaders[index];
+        const value = directHeaders[index + 1];
+        if (name !== undefined && value !== undefined) {
+          response.setHeader(String(name), value);
+        }
+      }
+    } else if (directHeaders) {
+      for (const [name, value] of Object.entries(directHeaders)) {
+        if (value !== undefined) response.setHeader(name, value);
+      }
+    }
+    forceProtectedHeaders();
+    return typeof statusMessageOrHeaders === "string"
+      ? originalWriteHead(statusCode, statusMessageOrHeaders)
+      : originalWriteHead(statusCode);
+  }) as typeof response.writeHead;
+
+  forceProtectedHeaders();
+}
 
 export interface RequirementIssuanceInput {
   readonly purpose: string;
@@ -397,6 +496,7 @@ export function createExpressHumanDependencyMiddleware(
     next: NextFunction,
   ) => {
     try {
+      installExpressProtectedHeaders(response);
       if (options.cors) {
         const cors = buildCorsHeaders(request.get("origin"), options.cors);
         if (cors) {
@@ -495,6 +595,8 @@ export interface FetchProtectResult {
   readonly response?: globalThis.Response;
   readonly result?: HumanResult;
   readonly requirement?: HumanRequirement;
+  /** Merge these into the final protected response when using this low-level API. */
+  readonly responseHeaders: Headers;
 }
 
 export async function protectFetchResource(
@@ -514,19 +616,22 @@ export async function protectFetchResource(
       return {
         response: globalThis.Response.json(problem, {
           status: problem.status,
-          headers: {
+          headers: protectedFetchHeaders({
             "content-type": "application/problem+json",
             ...(cors ?? {}),
-          },
+          }),
         }),
+        responseHeaders: protectedFetchHeaders(cors ?? undefined),
       };
     }
     if (request.method === "OPTIONS") {
+      const responseHeaders = protectedFetchHeaders(cors ?? undefined);
       return {
         response: new globalThis.Response(null, {
           status: 204,
-          headers: cors ?? {},
+          headers: responseHeaders,
         }),
+        responseHeaders,
       };
     }
   }
@@ -538,11 +643,13 @@ export async function protectFetchResource(
     !request.headers.get("idempotency-key")
   ) {
     const problem = publicProblem(400, "IDEMPOTENCY_KEY_REQUIRED");
+    const responseHeaders = protectedFetchHeaders(cors ?? undefined);
     return {
       response: globalThis.Response.json(problem, {
         status: problem.status,
-        headers: cors ?? {},
+        headers: responseHeaders,
       }),
+      responseHeaders,
     };
   }
 
@@ -578,16 +685,18 @@ export async function protectFetchResource(
       bodyInput,
     );
     const challenge = humanRequiredResponse(requirement);
+    const responseHeaders = protectedFetchHeaders({
+      ...(cors ?? {}),
+      ...challenge.headers,
+      vary: mergeVary(cors?.vary, challenge.headers.vary ?? ""),
+    });
     return {
       requirement,
       response: globalThis.Response.json(challenge.body, {
         status: challenge.status,
-        headers: {
-          ...(cors ?? {}),
-          ...challenge.headers,
-          vary: mergeVary(cors?.vary, challenge.headers.vary ?? ""),
-        },
+        headers: responseHeaders,
       }),
+      responseHeaders,
     };
   }
 
@@ -605,7 +714,11 @@ export async function protectFetchResource(
           : {}),
       },
     );
-    return { result, requirement };
+    return {
+      result,
+      requirement,
+      responseHeaders: protectedFetchHeaders(cors ?? undefined),
+    };
   } catch (error) {
     observeInternal(
       options.onInternalError,
@@ -614,11 +727,13 @@ export async function protectFetchResource(
       error,
     );
     const problem = publicProblem(401, "HUMAN_PROOF_REJECTED");
+    const responseHeaders = protectedFetchHeaders(cors ?? undefined);
     return {
       response: globalThis.Response.json(problem, {
         status: problem.status,
-        headers: cors ?? {},
+        headers: responseHeaders,
       }),
+      responseHeaders,
     };
   }
 }

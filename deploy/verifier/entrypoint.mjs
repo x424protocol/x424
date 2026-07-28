@@ -140,6 +140,12 @@ if (providerRequestMode !== "verifier" && providerRequestMode !== "issuer") {
   throw new Error("X424_PROVIDER_REQUEST_MODE must be verifier or issuer");
 }
 
+const redisTopology = required("X424_REDIS_TOPOLOGY");
+if (redisTopology !== "single-endpoint") {
+  throw new Error(
+    "X424_REDIS_TOPOLOGY must be single-endpoint; Redis Cluster is unsupported",
+  );
+}
 const redis = createClient({ url: required("REDIS_URL") });
 redis.on("error", () => {
   console.error(JSON.stringify({ level: "error", code: "REDIS_ERROR" }));
@@ -147,6 +153,7 @@ redis.on("error", () => {
 await redis.connect();
 const state = new RedisX424Store({
   client: redis,
+  topology: redisTopology,
   keyPrefix: process.env.X424_REDIS_PREFIX ?? "x424",
 });
 const rateLimiter = new RedisRateLimiter({
@@ -165,11 +172,7 @@ const worldBase = {
   action: required("WORLD_ACTION"),
   environment,
   allowLegacyProofs: boolean("WORLD_ALLOW_LEGACY_PROOFS"),
-  allowedEgressOrigins: [
-    environment === "production"
-      ? "https://developer.world.org"
-      : "https://staging-developer.worldcoin.org",
-  ],
+  allowedEgressOrigins: ["https://developer.world.org"],
   circuitBreaker: new CircuitBreaker({
     failureThreshold: integer("WORLD_CIRCUIT_FAILURES", 5, 1, 100),
     coolDownMs: integer("WORLD_CIRCUIT_COOLDOWN_MS", 30_000, 1_000, 3_600_000),
@@ -225,6 +228,12 @@ if (profile === "prod-ha-0.2" && !metadataToken) {
 
 const app = express();
 app.disable("x-powered-by");
+const trustProxyHops = integer("X424_TRUST_PROXY_HOPS", 0, 0, 10);
+if (trustProxyHops > 0) {
+  // A hop count is safe only when the verifier cannot be reached except
+  // through exactly this many operator-controlled reverse proxies.
+  app.set("trust proxy", trustProxyHops);
+}
 app.use(express.json({ limit: "256kb", strict: true }));
 if (metadataToken) {
   app.get("/.well-known/x424-verifier", async (request, response) => {

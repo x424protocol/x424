@@ -9,6 +9,7 @@ import {
   createStaticBearerIssuanceAuthenticator,
 } from "x424/express";
 import {
+  MemoryRateLimiter,
   X424Service,
   generatePairwiseSecret,
   generateResultKeyPair,
@@ -19,7 +20,10 @@ import { composeX424BeforeX402 } from "x424/x402";
 
 const redis = createClient({ url: process.env.REDIS_URL! });
 await redis.connect();
-const state = new RedisX424Store({ client: redis });
+const state = new RedisX424Store({
+  client: redis,
+  topology: "single-endpoint",
+});
 const resultKeys = generateResultKeyPair("x424-example-only");
 const world = worldProofOfHuman({
   appId: process.env.WORLD_APP_ID!,
@@ -51,6 +55,10 @@ app.use(
         subject: "paid-api-example",
         __devWildcardIssuance: true,
       },
+    }),
+    rateLimiter: new MemoryRateLimiter({
+      windowMs: 60_000,
+      maxRequests: 120,
     }),
   }),
 );

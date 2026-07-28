@@ -130,7 +130,8 @@ use published vectors and compare byte-for-byte.
   `InMemoryHandoffStore` are single-process and lose state on restart.
 - `RedisX424Store` and `PostgresX424Store` supply atomic shared state profiles,
   but production deployments must still secure, monitor, back up, and test
-  their topology against a named deployment profile.
+  their topology against a named deployment profile. Redis Cluster is
+  explicitly unsupported in 0.1.3; use one primary endpoint or PostgreSQL.
 - Issuance authentication, rate limits, CORS, and metadata helpers exist as
   composable interfaces; `dev-local-0.1` may omit them, while `eval-redis-0.2`
   and `prod-ha-0.2` must enable them. The router refuses non-dev profiles

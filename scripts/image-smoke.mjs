@@ -100,6 +100,8 @@ try {
       "--env",
       `REDIS_URL=redis://${redis}:6379`,
       "--env",
+      "X424_REDIS_TOPOLOGY=single-endpoint",
+      "--env",
       "X424_PAIRWISE_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "--env",
       "X424_HANDOFF_STATE_KEY=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
@@ -159,22 +161,19 @@ try {
     );
   }
   const { requirement } = await created.json();
-  const acceptance = async (operationId) => {
-    const response = await fetch(
-      `${base}/v1/results/smoke-result/acceptances`,
-      {
-        method: "POST",
-        headers: {
-          authorization: "Bearer smoke-token",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          operationId,
-          requestDigest: requirement.resource.requestDigest,
-          expiresAt: requirement.expiresAt,
-        }),
+  const acceptance = async (operationId, resultId = "smoke-result") => {
+    const response = await fetch(`${base}/v1/results/${resultId}/acceptances`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer smoke-token",
+        "content-type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        operationId,
+        requestDigest: requirement.resource.requestDigest,
+        expiresAt: requirement.expiresAt,
+      }),
+    });
     if (!response.ok) throw new Error(`acceptance failed: ${response.status}`);
     return (await response.json()).status;
   };
@@ -184,8 +183,76 @@ try {
     throw new Error("same-operation retry failed");
   if ((await acceptance("different-operation")) !== "replay")
     throw new Error("replay rejection failed");
+
+  const legacyExpiresAtMs = Date.now() + 24 * 60 * 60 * 1_000;
+  docker(
+    [
+      "exec",
+      redis,
+      "redis-cli",
+      "SET",
+      "x424:acceptance:legacy-smoke-result",
+      JSON.stringify({
+        operationId: "legacy-operation",
+        requestDigest: requirement.resource.requestDigest,
+      }),
+      "PXAT",
+      String(legacyExpiresAtMs),
+    ],
+    { quiet: true },
+  );
+  if (
+    (await acceptance("legacy-operation", "legacy-smoke-result")) !==
+    "same_operation"
+  ) {
+    throw new Error("legacy acceptance migration check failed");
+  }
+  if (
+    (await acceptance("different-operation", "legacy-smoke-result")) !==
+    "replay"
+  ) {
+    throw new Error("legacy acceptance replay rejection failed");
+  }
+
+  docker(
+    [
+      "exec",
+      redis,
+      "redis-cli",
+      "SET",
+      "x424:result:legacy-smoke-consumed",
+      "1",
+      "PXAT",
+      String(legacyExpiresAtMs),
+    ],
+    { quiet: true },
+  );
+  const legacyConsume = await fetch(
+    `${base}/v1/results/legacy-smoke-consumed/consume`,
+    {
+      method: "POST",
+      headers: {
+        authorization: "Bearer smoke-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ expiresAt: requirement.expiresAt }),
+    },
+  );
+  if (!legacyConsume.ok || (await legacyConsume.json()).consumed !== false) {
+    throw new Error("legacy result migration check failed");
+  }
+
+  const deleted = await fetch(
+    `${base}/v1/requirements/${requirement.dependencyId}`,
+    {
+      method: "DELETE",
+      headers: { authorization: "Bearer smoke-token" },
+    },
+  );
+  if (deleted.status !== 204)
+    throw new Error(`tenant requirement deletion failed: ${deleted.status}`);
   process.stdout.write(
-    "image-smoke ok: non-root, healthy, issuance, acceptance, replay\n",
+    "image-smoke ok: non-root, healthy, tenant state, legacy migration, acceptance, replay\n",
   );
 } finally {
   for (const container of [verifier, redis]) {

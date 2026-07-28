@@ -9,10 +9,18 @@ describe("OpenAPI contract", () => {
     );
     const spec = JSON.parse(raw) as {
       openapi: string;
-      paths: Record<string, unknown>;
+      info: { version: string };
+      paths: Record<
+        string,
+        {
+          post?: { security?: readonly Record<string, readonly string[]>[] };
+          delete?: { responses?: Record<string, unknown> };
+        }
+      >;
       components: { schemas: Record<string, unknown> };
     };
     expect(spec.openapi).toBe("3.1.0");
+    expect(spec.info.version).toBe("0.1.3");
     expect(Object.keys(spec.paths).sort()).toEqual([
       "/.well-known/x424-verifier",
       "/healthz",
@@ -29,6 +37,12 @@ describe("OpenAPI contract", () => {
     expect(spec.components.schemas.HumanRequiredProblem).toBeTruthy();
     expect(spec.components.schemas.HumanHandoff).toBeTruthy();
     expect(spec.components.schemas.ResultAcceptance).toBeTruthy();
+    expect(
+      spec.paths["/v1/requirements/{dependencyId}/verify"]?.post?.security,
+    ).toEqual([]);
+    expect(
+      spec.paths["/v1/requirements/{dependencyId}"]?.delete?.responses?.["404"],
+    ).toBeTruthy();
     expect(raw).toContain('"x424Transport"');
     expect(raw).toContain('"providerRequests"');
     expect(raw).not.toContain("providerSubject");

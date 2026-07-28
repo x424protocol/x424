@@ -28,7 +28,7 @@ Gates reference a named profile. “Works locally” is not a profile.
 | -------------------------------------------------- | ---------------------------------------------------------- |
 | Purpose                                            | Single-region evaluation / staging with Redis atomic state |
 | AuthN/AuthZ on issuance                            | Required (service identity + authorization policy)         |
-| State                                              | Redis 6.2+ atomic scripts; authenticated metadata          |
+| State                                              | Redis 6.2+ single-primary endpoint; authenticated metadata |
 | Availability                                       | 99.5% monthly (eval)                                       |
 | p99 create-requirement                             | ≤ 100 ms                                                   |
 | p99 verify (excl. provider RTT and human ceremony) | ≤ 250 ms                                                   |
@@ -48,7 +48,7 @@ Gates reference a named profile. “Works locally” is not a profile.
 | -------------------------------------------------- | -------------------------------------------------------- |
 | Purpose                                            | Production-shaped multi-instance deployment              |
 | AuthN/AuthZ on issuance                            | Required; least-privilege resource/method/purpose grants |
-| State                                              | Redis and/or PostgreSQL transactional profile; multi-AZ  |
+| State                                              | Redis primary endpoint or PostgreSQL; multi-AZ           |
 | Availability                                       | 99.9% monthly                                            |
 | p99 create-requirement                             | ≤ 80 ms                                                  |
 | p99 verify (excl. provider RTT and human ceremony) | ≤ 200 ms                                                 |

@@ -1,5 +1,7 @@
 import type {
   IsoTimestamp,
+  LegacyAwareResultAcceptanceStore,
+  LegacyAwareResultReplayStore,
   NonceStore,
   ProviderReplayEntry,
   ProviderReplayStore,
@@ -54,7 +56,10 @@ export class InMemoryNonceStore implements NonceStore {
 }
 
 /** Development/reference replay store. Production needs shared atomic state. */
-export class InMemoryResultReplayStore implements ResultReplayStore {
+export class InMemoryResultReplayStore
+  implements ResultReplayStore, LegacyAwareResultReplayStore
+{
+  readonly legacyResultStateMigration = true;
   readonly #used = new Map<string, number>();
 
   async consume(
@@ -77,6 +82,31 @@ export class InMemoryResultReplayStore implements ResultReplayStore {
     this.#used.set(resultId, expiresAtMs);
     return true;
   }
+
+  async consumeWithLegacy(
+    resultId: string,
+    legacyResultId: string,
+    expiresAt: IsoTimestamp,
+    now = new Date(),
+  ): Promise<boolean> {
+    const expiresAtMs = Date.parse(expiresAt);
+    if (
+      !resultId ||
+      !legacyResultId ||
+      !Number.isFinite(expiresAtMs) ||
+      expiresAtMs <= now.getTime()
+    ) {
+      return false;
+    }
+    for (const [id, expiry] of this.#used) {
+      if (expiry <= now.getTime()) this.#used.delete(id);
+    }
+    if (this.#used.has(legacyResultId) || this.#used.has(resultId)) {
+      return false;
+    }
+    this.#used.set(resultId, expiresAtMs);
+    return true;
+  }
 }
 
 interface ResultAcceptanceEntry {
@@ -86,7 +116,10 @@ interface ResultAcceptanceEntry {
 }
 
 /** Development/reference acceptance store. Production needs shared atomic state. */
-export class InMemoryResultAcceptanceStore implements ResultAcceptanceStore {
+export class InMemoryResultAcceptanceStore
+  implements ResultAcceptanceStore, LegacyAwareResultAcceptanceStore
+{
+  readonly legacyResultStateMigration = true;
   readonly #accepted = new Map<string, ResultAcceptanceEntry>();
 
   async accept(
@@ -109,6 +142,44 @@ export class InMemoryResultAcceptanceStore implements ResultAcceptanceStore {
       if (entry.expiresAtMs <= now.getTime()) this.#accepted.delete(id);
     }
     const existing = this.#accepted.get(input.resultId);
+    if (existing) {
+      return existing.operationId === input.operationId &&
+        existing.requestDigest === input.requestDigest
+        ? "same_operation"
+        : "replay";
+    }
+    this.#accepted.set(input.resultId, {
+      operationId: input.operationId,
+      requestDigest: input.requestDigest,
+      expiresAtMs,
+    });
+    return "new";
+  }
+
+  async acceptWithLegacy(
+    input: ResultAcceptanceInput,
+    legacyResultId: string,
+    now = new Date(),
+  ): Promise<ResultAcceptanceStatus> {
+    const expiresAtMs = Date.parse(input.expiresAt);
+    if (
+      !input.resultId ||
+      input.resultId.length > 200 ||
+      !legacyResultId ||
+      legacyResultId.length > 200 ||
+      !input.operationId ||
+      input.operationId.length > 512 ||
+      !/^sha256:[A-Za-z0-9_-]{43}$/u.test(input.requestDigest) ||
+      !Number.isFinite(expiresAtMs) ||
+      expiresAtMs <= now.getTime()
+    ) {
+      return "replay";
+    }
+    for (const [id, entry] of this.#accepted) {
+      if (entry.expiresAtMs <= now.getTime()) this.#accepted.delete(id);
+    }
+    const existing =
+      this.#accepted.get(legacyResultId) ?? this.#accepted.get(input.resultId);
     if (existing) {
       return existing.operationId === input.operationId &&
         existing.requestDigest === input.requestDigest

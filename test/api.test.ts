@@ -10,13 +10,17 @@ import {
   InMemoryProviderReplayStore,
   InMemoryRequirementStore,
   InMemoryResultAcceptanceStore,
+  InMemoryResultReplayStore,
   X424Service,
+  createStaticBearerIssuanceAuthenticator,
   createWorldIdVerifierProfile,
   createX424HttpRouter,
   generatePairwiseSecret,
   generateResultKeyPair,
   worldIdProviderRequestFromRequirement,
   type HumanRequirement,
+  type IssuancePrincipal,
+  type RequirementStore,
 } from "../src/index.js";
 
 describe("reference HTTP API", () => {
@@ -437,5 +441,285 @@ describe("reference HTTP API", () => {
     await expect((await accept("operation-2")).json()).resolves.toEqual({
       status: "replay",
     });
+  });
+
+  it("isolates authenticated state between tenants and bounds state expiry", async () => {
+    const profile = createWorldIdVerifierProfile({
+      appId: "app_test",
+      rpId: "rp_test",
+      action: "x424-test",
+      environment: "staging",
+      signingKeyHex: `0x${"34".repeat(32)}`,
+      verifyRemote: async () => {
+        throw new Error("not called");
+      },
+    });
+    const tenantPrincipal = (
+      issuer: string,
+      subject: string,
+    ): IssuancePrincipal => ({
+      issuer,
+      subject,
+      allowedPurposes: ["test"],
+      allowedAudiences: ["https://api.example.test"],
+      allowedHttpMethods: ["POST"],
+      allowedMethods: ["world:proof-of-human"],
+      allowedResources: [
+        {
+          origin: "https://api.example.test",
+          pathPrefix: "/action",
+        },
+      ],
+    });
+    const authenticator = createStaticBearerIssuanceAuthenticator({
+      tenantA: tenantPrincipal("https://issuer-a.example", "shared-subject"),
+      tenantB: tenantPrincipal("https://issuer-b.example", "shared-subject"),
+    });
+    const requirements = new InMemoryRequirementStore();
+    const resultReplayStore = new InMemoryResultReplayStore();
+    const resultAcceptanceStore = new InMemoryResultAcceptanceStore();
+    const rateLimitKeys: string[] = [];
+    const service = new X424Service({
+      catalog: profile.catalog,
+      adapters: [profile.adapter],
+      nonceStore: new InMemoryNonceStore(),
+      providerReplayStore: new InMemoryProviderReplayStore(),
+      pairwiseSecret: generatePairwiseSecret(),
+      resultSigner: generateResultKeyPair().signer,
+    });
+    const legacyBacking = new InMemoryRequirementStore();
+    const legacyRequirements: RequirementStore = {
+      put: (requirement) => legacyBacking.put(requirement),
+      get: (dependencyId, now) => legacyBacking.get(dependencyId, now),
+      delete: (dependencyId) => legacyBacking.delete(dependencyId),
+    };
+    expect(() =>
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: legacyRequirements,
+        issuanceAuthenticator: authenticator,
+        deploymentProfile: "dev-local-0.1",
+      }),
+    ).toThrow(/TenantIsolatedRequirementStore/);
+    expect(() =>
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: requirements,
+        resultReplayStore: {
+          consume: async () => true,
+        },
+        issuanceAuthenticator: authenticator,
+        deploymentProfile: "dev-local-0.1",
+      }),
+    ).toThrow(/LegacyAwareResultReplayStore/);
+    expect(() =>
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: requirements,
+        resultAcceptanceStore: {
+          accept: async () => "new",
+        },
+        issuanceAuthenticator: authenticator,
+        deploymentProfile: "dev-local-0.1",
+      }),
+    ).toThrow(/LegacyAwareResultAcceptanceStore/);
+    expect(() =>
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: requirements,
+        resultReplayStore,
+        resultAcceptanceStore,
+        issuanceAuthenticator: authenticator,
+        deploymentProfile: "dev-local-0.1",
+      }),
+    ).toThrow(/rateLimiter/);
+    const app = express();
+    app.use(express.json({ limit: "256kb" }));
+    app.use(
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: requirements,
+        resultReplayStore,
+        resultAcceptanceStore,
+        issuanceAuthenticator: authenticator,
+        rateLimiter: {
+          consume: (key) => {
+            rateLimitKeys.push(key);
+            return {
+              allowed: true,
+              remaining: 99,
+              resetAt: Date.now() + 60_000,
+            };
+          },
+        },
+        deploymentProfile: "dev-local-0.1",
+      }),
+    );
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+    const authorization = (token: string) => ({
+      authorization: `Bearer ${token}`,
+    });
+
+    const created = await fetch(`${base}/v1/requirements`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...authorization("tenantA"),
+      },
+      body: JSON.stringify({
+        purpose: "test",
+        method: "POST",
+        uri: "https://api.example.test/action",
+        audience: "https://api.example.test",
+        binding: { kind: "agent_key", value: "sha256:tenant-test" },
+        accepts: profile.accepts,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { requirement } = (await created.json()) as {
+      requirement: HumanRequirement;
+    };
+    const requirementUrl = `${base}/v1/requirements/${requirement.dependencyId}`;
+
+    expect(
+      (
+        await fetch(requirementUrl, {
+          headers: authorization("tenantB"),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await fetch(requirementUrl, {
+          method: "DELETE",
+          headers: authorization("tenantB"),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await fetch(requirementUrl, {
+          headers: authorization("tenantA"),
+        })
+      ).status,
+    ).toBe(200);
+
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const legacyExpiresAt = new Date(
+      Date.now() + 24 * 60 * 60 * 1_000,
+    ).toISOString();
+    await expect(
+      resultReplayStore.consume("legacy-consumed", legacyExpiresAt),
+    ).resolves.toBe(true);
+    await expect(
+      resultAcceptanceStore.accept({
+        resultId: "legacy-acceptance",
+        operationId: "legacy-operation",
+        requestDigest: requirement.resource.requestDigest,
+        expiresAt: legacyExpiresAt,
+      }),
+    ).resolves.toBe("new");
+    const consume = (token: string, resultId: string, expiry = expiresAt) =>
+      fetch(`${base}/v1/results/${resultId}/consume`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...authorization(token),
+        },
+        body: JSON.stringify({ expiresAt: expiry }),
+      });
+    await expect(
+      (await consume("tenantA", "shared-result")).json(),
+    ).resolves.toEqual({ consumed: true });
+    await expect(
+      (await consume("tenantB", "shared-result")).json(),
+    ).resolves.toEqual({ consumed: true });
+    await expect(
+      (await consume("tenantA", "shared-result")).json(),
+    ).resolves.toEqual({ consumed: false });
+    await expect(
+      (await consume("tenantA", "legacy-consumed")).json(),
+    ).resolves.toEqual({ consumed: false });
+
+    const accept = (
+      token: string,
+      operationId: string,
+      resultId = "shared-acceptance",
+      expiry = expiresAt,
+    ) =>
+      fetch(`${base}/v1/results/${resultId}/acceptances`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...authorization(token),
+        },
+        body: JSON.stringify({
+          operationId,
+          requestDigest: requirement.resource.requestDigest,
+          expiresAt: expiry,
+        }),
+      });
+    await expect(
+      (await accept("tenantA", "operation-a")).json(),
+    ).resolves.toEqual({ status: "new" });
+    await expect(
+      (await accept("tenantB", "operation-b")).json(),
+    ).resolves.toEqual({ status: "new" });
+    await expect(
+      (await accept("tenantA", "other-operation", "legacy-acceptance")).json(),
+    ).resolves.toEqual({ status: "replay" });
+    await expect(
+      (await accept("tenantA", "legacy-operation", "legacy-acceptance")).json(),
+    ).resolves.toEqual({ status: "same_operation" });
+
+    const tooFarInFuture = new Date(Date.now() + 3_600_000).toISOString();
+    expect(
+      (await consume("tenantA", "future-result", tooFarInFuture)).status,
+    ).toBe(400);
+    expect(
+      (
+        await accept(
+          "tenantA",
+          "future-operation",
+          "future-acceptance",
+          tooFarInFuture,
+        )
+      ).status,
+    ).toBe(400);
+    await expect(
+      (await consume("tenantA", "future-result")).json(),
+    ).resolves.toEqual({ consumed: true });
+    await expect(
+      (await accept("tenantA", "future-operation", "future-acceptance")).json(),
+    ).resolves.toEqual({ status: "new" });
+
+    expect(
+      (
+        await fetch(requirementUrl, {
+          method: "DELETE",
+          headers: authorization("tenantA"),
+        })
+      ).status,
+    ).toBe(204);
+    expect(rateLimitKeys).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("state:requirement-read:tenant:"),
+        expect.stringContaining("state:requirement-delete:tenant:"),
+        expect.stringContaining("state:result-consume:tenant:"),
+        expect.stringContaining("state:result-accept:tenant:"),
+      ]),
+    );
+    expect(rateLimitKeys.join("\n")).not.toContain("shared-subject");
+    expect(rateLimitKeys.join("\n")).not.toContain("issuer-a");
+    expect(rateLimitKeys.join("\n")).not.toContain("issuer-b");
   });
 });

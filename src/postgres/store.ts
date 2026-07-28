@@ -8,12 +8,13 @@ import { parseHumanRequirement } from "../schemas.js";
 import type {
   HumanRequirement,
   IsoTimestamp,
+  LegacyAwareResultAcceptanceStore,
+  LegacyAwareResultReplayStore,
   NonceStore,
   ProviderReplayEntry,
   ProviderReplayStore,
-  RequirementStore,
   ResultAcceptanceStore,
-  ResultReplayStore,
+  TenantIsolatedRequirementStore,
 } from "../types.js";
 import {
   parseStoredHumanHandoff,
@@ -43,6 +44,16 @@ function ttlSeconds(expiresAt: IsoTimestamp, now = new Date()): number {
   return Math.max(1, Math.ceil(ms / 1_000));
 }
 
+function assertRequirementTenantId(tenantId: string): void {
+  if (
+    !tenantId ||
+    tenantId.length > 512 ||
+    /[\u0000-\u001f\u007f]/u.test(tenantId)
+  ) {
+    throw new Error("Invalid requirement tenant ID");
+  }
+}
+
 /**
  * Apply schema DDL once at deploy time. Safe to re-run (IF NOT EXISTS).
  */
@@ -54,9 +65,12 @@ CREATE TABLE IF NOT EXISTS x424_nonces (
 );
 CREATE TABLE IF NOT EXISTS x424_requirements (
   dependency_id TEXT PRIMARY KEY,
+  owner_id TEXT,
   document JSONB NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL
 );
+ALTER TABLE x424_requirements
+  ADD COLUMN IF NOT EXISTS owner_id TEXT;
 CREATE TABLE IF NOT EXISTS x424_provider_subjects (
   digest TEXT PRIMARY KEY,
   expires_at TIMESTAMPTZ NOT NULL
@@ -89,9 +103,9 @@ export class PostgresX424Store {
   readonly #client: PostgresQueryClient;
   readonly nonces: NonceStore;
   readonly providers: ProviderReplayStore;
-  readonly requirements: RequirementStore;
-  readonly results: ResultReplayStore;
-  readonly resultAcceptances: ResultAcceptanceStore;
+  readonly requirements: TenantIsolatedRequirementStore;
+  readonly results: LegacyAwareResultReplayStore;
+  readonly resultAcceptances: LegacyAwareResultAcceptanceStore;
   readonly handoffs: HandoffStore;
 
   constructor(options: PostgresX424StoreOptions) {
@@ -107,20 +121,41 @@ export class PostgresX424Store {
       consume: (entry: ProviderReplayEntry) => this.#consumeProvider(entry),
     });
     this.requirements = Object.freeze({
+      tenantIsolation: true as const,
       put: (requirement: HumanRequirement) => this.#putRequirement(requirement),
+      putForTenant: (requirement: HumanRequirement, tenantId: string) =>
+        this.#putRequirement(requirement, tenantId),
       get: (dependencyId: string, now?: Date) =>
         this.#getRequirement(dependencyId, now),
+      getForTenant: (dependencyId: string, tenantId: string, now?: Date) =>
+        this.#getRequirementForTenant(dependencyId, tenantId, now),
       delete: (dependencyId: string) => this.#deleteRequirement(dependencyId),
+      deleteForTenant: (dependencyId: string, tenantId: string) =>
+        this.#deleteRequirementForTenant(dependencyId, tenantId),
     });
     this.results = Object.freeze({
+      legacyResultStateMigration: true as const,
       consume: (resultId: string, expiresAt: IsoTimestamp, now?: Date) =>
         this.#consumeResult(resultId, expiresAt, now),
+      consumeWithLegacy: (
+        resultId: string,
+        legacyResultId: string,
+        expiresAt: IsoTimestamp,
+        now?: Date,
+      ) =>
+        this.#consumeResultWithLegacy(resultId, legacyResultId, expiresAt, now),
     });
     this.resultAcceptances = Object.freeze({
+      legacyResultStateMigration: true as const,
       accept: (
         input: Parameters<ResultAcceptanceStore["accept"]>[0],
         now?: Date,
       ) => this.#acceptResult(input, now),
+      acceptWithLegacy: (
+        input: Parameters<ResultAcceptanceStore["accept"]>[0],
+        legacyResultId: string,
+        now?: Date,
+      ) => this.#acceptResultWithLegacy(input, legacyResultId, now),
     });
   }
 
@@ -156,18 +191,38 @@ export class PostgresX424Store {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async #putRequirement(requirement: HumanRequirement): Promise<void> {
-    const result = await this.#client.query(
-      `INSERT INTO x424_requirements (dependency_id, document, expires_at)
-       VALUES ($1, $2::jsonb, $3::timestamptz)
-       ON CONFLICT (dependency_id) DO NOTHING
-       RETURNING dependency_id`,
-      [
-        requirement.dependencyId,
-        canonicalJson(requirement),
-        requirement.expiresAt,
-      ],
-    );
+  async #putRequirement(
+    requirement: HumanRequirement,
+    tenantId?: string,
+  ): Promise<void> {
+    if (tenantId !== undefined) assertRequirementTenantId(tenantId);
+    const result =
+      tenantId === undefined
+        ? await this.#client.query(
+            `INSERT INTO x424_requirements
+               (dependency_id, document, expires_at)
+             VALUES ($1, $2::jsonb, $3::timestamptz)
+             ON CONFLICT (dependency_id) DO NOTHING
+             RETURNING dependency_id`,
+            [
+              requirement.dependencyId,
+              canonicalJson(requirement),
+              requirement.expiresAt,
+            ],
+          )
+        : await this.#client.query(
+            `INSERT INTO x424_requirements
+               (dependency_id, owner_id, document, expires_at)
+             VALUES ($1, $2, $3::jsonb, $4::timestamptz)
+             ON CONFLICT (dependency_id) DO NOTHING
+             RETURNING dependency_id`,
+            [
+              requirement.dependencyId,
+              tenantId,
+              canonicalJson(requirement),
+              requirement.expiresAt,
+            ],
+          );
     if ((result.rowCount ?? 0) === 0) {
       throw new Error("Dependency ID already exists");
     }
@@ -192,11 +247,46 @@ export class PostgresX424Store {
     return parseHumanRequirement(row.document);
   }
 
+  async #getRequirementForTenant(
+    dependencyId: string,
+    tenantId: string,
+    now = new Date(),
+  ): Promise<HumanRequirement | undefined> {
+    assertRequirementTenantId(tenantId);
+    const result = await this.#client.query(
+      `SELECT document, expires_at FROM x424_requirements
+       WHERE dependency_id = $1 AND owner_id = $2`,
+      [dependencyId, tenantId],
+    );
+    const row = result.rows[0];
+    if (!row) return undefined;
+    const expiresAt = Date.parse(String(row.expires_at));
+    if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) {
+      await this.#deleteRequirement(dependencyId);
+      return undefined;
+    }
+    return parseHumanRequirement(row.document);
+  }
+
   async #deleteRequirement(dependencyId: string): Promise<void> {
     await this.#client.query(
       `DELETE FROM x424_requirements WHERE dependency_id = $1`,
       [dependencyId],
     );
+  }
+
+  async #deleteRequirementForTenant(
+    dependencyId: string,
+    tenantId: string,
+  ): Promise<boolean> {
+    assertRequirementTenantId(tenantId);
+    const result = await this.#client.query(
+      `DELETE FROM x424_requirements
+       WHERE dependency_id = $1 AND owner_id = $2 AND expires_at > NOW()
+       RETURNING dependency_id`,
+      [dependencyId, tenantId],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async #consumeProvider(entry: ProviderReplayEntry): Promise<boolean> {
@@ -239,6 +329,38 @@ export class PostgresX424Store {
     return (result.rowCount ?? 0) > 0;
   }
 
+  async #consumeResultWithLegacy(
+    resultId: string,
+    legacyResultId: string,
+    expiresAt: IsoTimestamp,
+    now = new Date(),
+  ): Promise<boolean> {
+    if (
+      !resultId ||
+      !legacyResultId ||
+      legacyResultId.length > 200 ||
+      Date.parse(expiresAt) <= now.getTime()
+    ) {
+      return false;
+    }
+    const result = await this.#client.query(
+      `WITH legacy_result AS (
+         SELECT result_id
+         FROM x424_results
+         WHERE result_id = $2 AND expires_at > $3::timestamptz
+       ), inserted AS (
+         INSERT INTO x424_results (result_id, expires_at)
+         SELECT $1, $4::timestamptz
+         WHERE NOT EXISTS (SELECT 1 FROM legacy_result)
+         ON CONFLICT (result_id) DO NOTHING
+         RETURNING result_id
+       )
+       SELECT EXISTS (SELECT 1 FROM inserted) AS consumed`,
+      [resultId, legacyResultId, now.toISOString(), expiresAt],
+    );
+    return result.rows[0]?.consumed === true;
+  }
+
   async #acceptResult(
     input: Parameters<ResultAcceptanceStore["accept"]>[0],
     now = new Date(),
@@ -271,6 +393,63 @@ export class PostgresX424Store {
          ELSE 'replay'
        END AS status`,
       [input.resultId, input.operationId, input.requestDigest, input.expiresAt],
+    );
+    const status = result.rows[0]?.status;
+    return status === "new" || status === "same_operation" ? status : "replay";
+  }
+
+  async #acceptResultWithLegacy(
+    input: Parameters<ResultAcceptanceStore["accept"]>[0],
+    legacyResultId: string,
+    now = new Date(),
+  ): Promise<Awaited<ReturnType<ResultAcceptanceStore["accept"]>>> {
+    if (
+      !input.resultId ||
+      input.resultId.length > 200 ||
+      !legacyResultId ||
+      legacyResultId.length > 200 ||
+      !input.operationId ||
+      input.operationId.length > 512 ||
+      !/^sha256:[A-Za-z0-9_-]{43}$/u.test(input.requestDigest) ||
+      Date.parse(input.expiresAt) <= now.getTime()
+    ) {
+      return "replay";
+    }
+    const result = await this.#client.query(
+      `WITH legacy_result AS (
+         SELECT operation_id, request_digest
+         FROM x424_result_acceptances
+         WHERE result_id = $2 AND expires_at > $5::timestamptz
+       ), inserted AS (
+         INSERT INTO x424_result_acceptances
+           (result_id, operation_id, request_digest, expires_at)
+         SELECT $1, $3, $4, $6::timestamptz
+         WHERE NOT EXISTS (SELECT 1 FROM legacy_result)
+         ON CONFLICT (result_id) DO NOTHING
+         RETURNING result_id
+       ), existing_result AS (
+         SELECT operation_id, request_digest FROM legacy_result
+         UNION ALL
+         SELECT operation_id, request_digest
+         FROM x424_result_acceptances
+         WHERE result_id = $1 AND expires_at > $5::timestamptz
+       )
+       SELECT CASE
+         WHEN EXISTS (SELECT 1 FROM inserted) THEN 'new'
+         WHEN EXISTS (
+           SELECT 1 FROM existing_result
+           WHERE operation_id = $3 AND request_digest = $4
+         ) THEN 'same_operation'
+         ELSE 'replay'
+       END AS status`,
+      [
+        input.resultId,
+        legacyResultId,
+        input.operationId,
+        input.requestDigest,
+        now.toISOString(),
+        input.expiresAt,
+      ],
     );
     const status = result.rows[0]?.status;
     return status === "new" || status === "same_operation" ? status : "replay";
