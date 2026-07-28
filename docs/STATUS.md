@@ -12,10 +12,10 @@ release gates remain in the [roadmap](ROADMAP.md) and
 | Surface                     | State                                | Evidence                                                                                  |
 | --------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------- |
 | HTTP wire contract          | Implemented and locally tested       | Protocol, schemas, OpenAPI, conformance vectors                                           |
-| TypeScript SDK              | Published npm developer preview      | [Provenance-backed `x424@0.1.3`](program/RELEASE_0.1.3.md), package and conformance tests |
+| TypeScript SDK              | Published npm developer preview      | [Provenance-backed `x424@0.1.4`](program/RELEASE_0.1.4.md), package and conformance tests |
 | World profile               | Synthetic positive/negative coverage | v4 default, legacy opt-in, provider-request vectors                                       |
 | Framework adapters          | Implemented and locally tested       | Fetch, Express, and Next.js parity tests                                                  |
-| Self-hosted verifier        | Published signed evaluation profile  | [Pinned 0.1.3 image and attestations](program/RELEASE_0.1.3.md), Compose, Redis, Helm     |
+| Self-hosted verifier        | Published signed evaluation profile  | [Pinned 0.1.4 image and attestations](program/RELEASE_0.1.4.md), Compose, Redis, Helm     |
 | Managed-verifier interfaces | Implemented and locally tested       | Issuance, metadata, requirement, replay, acceptance, handoff                              |
 | Agent key possession        | Implemented and locally tested       | Ed25519, EIP-191, ERC-1271, Content-Digest, exact retry nonce                             |
 | Brokered human handoff      | Implemented with a World HA caveat   | Generic Redis/PostgreSQL CAS; public-IDKit process-local session                          |

@@ -7,20 +7,19 @@ provider-subject digests, result replay markers, and rate limits in Redis; and
 same-operation result acceptances and encrypted brokered handoffs in Redis; and
 shuts down gracefully.
 
-The signed 0.1.3 developer-preview image remains public:
+The signed 0.1.4 developer-preview image is public:
 
 ```bash
-docker pull ghcr.io/x424protocol/x424-verifier@sha256:d97587f1d7c5b8cffda7753a9da24da9b4a2da1880b339133fc4bac3ff6bfbcd
+docker pull ghcr.io/x424protocol/x424-verifier@sha256:471dd506115fb740e61e0f1263161ba91f171c706e7b4071c9e606feb1cb8061
 ```
 
-See the [0.1.3 release evidence](../../docs/program/RELEASE_0.1.3.md) for the
+See the [0.1.4 release evidence](../../docs/program/RELEASE_0.1.4.md) for the
 source tag, workflow, npm artifact, provenance, SBOM, signature, and maturity
 boundary. The previous 0.1.2 image is historical evidence only and must not be
 deployed; 0.1.3 fixes verifier isolation and protected-response cache
 boundaries. Version 0.1.4 additionally places the protected metadata route
-behind the shared Redis limiter and is staged for publication. Until 0.1.4 is
-published, place 0.1.3 behind an external ingress rate limit and use bearer
-credentials generated from at least 32 random bytes.
+behind the shared Redis limiter, enforces production bearer credential
+structure, and makes trusted-proxy ingress restrictions explicit.
 
 ## Local evaluation
 
@@ -70,23 +69,19 @@ deployment safe.
 
 ## Helm evaluation
 
-The chart is staged for 0.1.4 with the `0.1.4` tag and an empty digest; it does
-not retain the previous 0.1.3 image digest. After release automation publishes
-the image, set `image.digest` to the published 0.1.4 digest before deploying
-valuable traffic. The other defaults select the `eval-redis-0.2` runtime
-controls, World staging, issuer-supplied provider requests, and one replica.
-Selecting `prod-ha-0.2` also makes a non-empty immutable `image.digest`
-mandatory; the chart refuses a mutable production tag. Put the required
-environment variables in an existing Secret; the chart deliberately does not
-render key material:
+The chart defaults to the immutable published 0.1.4 image digest, the
+`eval-redis-0.2` runtime controls, World staging, issuer-supplied provider
+requests, and one replica. Selecting `prod-ha-0.2` also keeps a non-empty
+immutable `image.digest` mandatory; the chart refuses a mutable production
+tag. Put the required environment variables in an existing Secret; the chart
+deliberately does not render key material:
 
 ```bash
 kubectl create namespace x424
 kubectl --namespace x424 create secret generic x424-verifier \
   --from-env-file=/secure/path/x424-verifier.env
 helm upgrade --install x424-verifier deploy/verifier/helm \
-  --namespace x424 \
-  --set-string image.digest=sha256:REPLACE_WITH_PUBLISHED_0_1_4_DIGEST
+  --namespace x424
 ```
 
 For the default mode, the Secret must supply `REDIS_URL`,
@@ -167,7 +162,5 @@ key bytes enter x424. Development/evaluation profiles instead require an exact
 - signed image verification, SBOM retention, and the runbooks in `docs/runbooks/`
 
 The Helm chart supplies workload-level probes, non-root restrictions, resource
-limits, support for immutable `image.digest` references, a disruption budget,
-and network-policy defaults. The staged release tag is not an immutable
-reference; set `image.digest` before valuable traffic. Secrets are deliberately
-not rendered by the chart.
+limits, an immutable default image reference, a disruption budget, and
+network-policy defaults. Secrets are deliberately not rendered by the chart.
