@@ -52,9 +52,8 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
   `responseHeaders` with `finalizeFetchX424Response()` to every downstream
   response. `createFetchX424Handler()` performs this finalization
   automatically.
-- The 0.1.3 Helm chart is staged with the `0.1.3` image tag and no digest. The
-  released image digest must be recorded and pinned before valuable traffic;
-  the chart no longer points at the previous 0.1.2 image.
+- The 0.1.3 Helm chart pins the published verifier image by its immutable
+  digest and no longer points at the previous 0.1.2 image.
 - `RedisX424Store` now requires an explicit `single-endpoint` topology. Redis
   Cluster is unsupported during the legacy/new-key atomic migration because
   pre-0.1.3 keys do not share a hash slot.

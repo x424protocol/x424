@@ -4,10 +4,9 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/x424protocol/x424-verifier
-  # Staged for the 0.1.3 release. Pin the published 0.1.3 digest before
-  # deploying valuable traffic; a tag is mutable.
+  # Published 0.1.3 image, pinned immutably.
   tag: "0.1.3"
-  digest: ""
+  digest: "sha256:d97587f1d7c5b8cffda7753a9da24da9b4a2da1880b339133fc4bac3ff6bfbcd"
   pullPolicy: IfNotPresent
 
 service:
