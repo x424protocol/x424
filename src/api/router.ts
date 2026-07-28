@@ -4,12 +4,15 @@ import {
   assertIssuanceRouterConfig,
   authorizeIssuance,
   IssuanceAuthorizationError,
+  validateIssuancePrincipal,
+  type AnyIssuancePrincipal,
   type DeploymentProfile,
   type IssuanceAuthenticator,
 } from "../auth/issuance.js";
 import { HUMAN_METHOD_IDENTIFIER_PATTERN } from "../catalog.js";
 import {
   bodyInputFromPlainJsonBody,
+  sha256,
   type RequestBodyDigestInput,
 } from "../canonical.js";
 import { decodeStrictBase64Url } from "../encoding.js";
@@ -29,9 +32,12 @@ import type { X424Service } from "../service.js";
 import type {
   HumanBinding,
   HumanMethodRequirement,
+  LegacyAwareResultAcceptanceStore,
+  LegacyAwareResultReplayStore,
   RequirementStore,
   ResultAcceptanceStore,
   ResultReplayStore,
+  TenantIsolatedRequirementStore,
 } from "../types.js";
 
 const MethodSchema = z
@@ -153,6 +159,9 @@ const ResultAcceptanceSchema = z
   })
   .strict();
 
+const StateResourceIdSchema = z.string().min(1).max(200);
+const MAXIMUM_STATE_TTL_SECONDS = 900;
+
 const StartHandoffSchema = z
   .object({
     nonce: z.string().min(1).max(512),
@@ -197,6 +206,12 @@ export interface X424HttpRouterOptions {
           resetAt: number;
         }>;
   };
+  /**
+   * Upper bound for caller-presented result state. It may be reduced for
+   * deployments with shorter result lifetimes, but never exceeds the protocol
+   * requirement TTL ceiling.
+   */
+  readonly maximumStateTtlSeconds?: number;
   /** Readiness check for durable state and verifier dependencies. Required outside dev-local. */
   readonly readinessCheck?: () => void | Promise<void>;
   /** Required. Omission does not select dev-local. */
@@ -234,6 +249,67 @@ function sendProblem(
     .status(problem.status)
     .type("application/problem+json")
     .json(problem);
+}
+
+function isTenantIsolatedRequirementStore(
+  store: RequirementStore,
+): store is TenantIsolatedRequirementStore {
+  const candidate = store as Partial<TenantIsolatedRequirementStore>;
+  return (
+    candidate.tenantIsolation === true &&
+    typeof candidate.putForTenant === "function" &&
+    typeof candidate.getForTenant === "function" &&
+    typeof candidate.deleteForTenant === "function"
+  );
+}
+
+function isLegacyAwareResultReplayStore(
+  store: ResultReplayStore,
+): store is LegacyAwareResultReplayStore {
+  const candidate = store as Partial<LegacyAwareResultReplayStore>;
+  return (
+    candidate.legacyResultStateMigration === true &&
+    typeof candidate.consumeWithLegacy === "function"
+  );
+}
+
+function isLegacyAwareResultAcceptanceStore(
+  store: ResultAcceptanceStore,
+): store is LegacyAwareResultAcceptanceStore {
+  const candidate = store as Partial<LegacyAwareResultAcceptanceStore>;
+  return (
+    candidate.legacyResultStateMigration === true &&
+    typeof candidate.acceptWithLegacy === "function"
+  );
+}
+
+function scopedStateId(tenantId: string, stateId: string): string {
+  return sha256(`x424-state-v1\u0000${tenantId}\u0000${stateId}`);
+}
+
+function tenantStateId(principal: AnyIssuancePrincipal): string {
+  const issuer =
+    "issuer" in principal && principal.issuer !== undefined
+      ? principal.issuer
+      : "";
+  return sha256(`x424-tenant-v2\u0000${issuer}\u0000${principal.subject}`);
+}
+
+function networkStateId(request: Request): string {
+  return sha256(request.ip ?? "unknown");
+}
+
+function boundedFutureExpiry(
+  expiresAt: string,
+  maximumTtlSeconds: number,
+  now = Date.now(),
+): boolean {
+  const expiresAtMs = Date.parse(expiresAt);
+  return (
+    Number.isFinite(expiresAtMs) &&
+    expiresAtMs > now &&
+    expiresAtMs <= now + maximumTtlSeconds * 1_000
+  );
 }
 
 /**
@@ -282,13 +358,105 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   const requirementStore =
     options.requirementStore ??
     new InMemoryRequirementStore(options.maximumPendingRequirements ?? 10_000);
+  const tenantRequirementStore = isTenantIsolatedRequirementStore(
+    requirementStore,
+  )
+    ? requirementStore
+    : undefined;
+  if (options.issuanceAuthenticator && !tenantRequirementStore) {
+    throw new Error(
+      "Authenticated verifier APIs require a TenantIsolatedRequirementStore",
+    );
+  }
+  if (
+    options.issuanceAuthenticator &&
+    options.resultReplayStore &&
+    !isLegacyAwareResultReplayStore(options.resultReplayStore)
+  ) {
+    throw new Error(
+      "Authenticated verifier APIs require a LegacyAwareResultReplayStore",
+    );
+  }
+  if (
+    options.issuanceAuthenticator &&
+    options.resultAcceptanceStore &&
+    !isLegacyAwareResultAcceptanceStore(options.resultAcceptanceStore)
+  ) {
+    throw new Error(
+      "Authenticated verifier APIs require a LegacyAwareResultAcceptanceStore",
+    );
+  }
+  const maximumStateTtlSeconds =
+    options.maximumStateTtlSeconds ?? MAXIMUM_STATE_TTL_SECONDS;
+  if (
+    !Number.isInteger(maximumStateTtlSeconds) ||
+    maximumStateTtlSeconds < 1 ||
+    maximumStateTtlSeconds > MAXIMUM_STATE_TTL_SECONDS
+  ) {
+    throw new Error(
+      `maximumStateTtlSeconds must be between 1 and ${MAXIMUM_STATE_TTL_SECONDS}`,
+    );
+  }
 
-  const authenticateStateRequest = async (request: Request): Promise<void> => {
+  const authenticateStateRequest = async (
+    request: Request,
+  ): Promise<AnyIssuancePrincipal | undefined> => {
     if (options.issuanceAuthenticator) {
-      await options.issuanceAuthenticator.authenticate({
-        authorizationHeader: request.get("authorization") ?? null,
-      });
+      const principal = validateIssuancePrincipal(
+        await options.issuanceAuthenticator.authenticate({
+          authorizationHeader: request.get("authorization") ?? null,
+        }),
+      );
+      if (profile !== "dev-local-0.1" && "__devWildcardIssuance" in principal) {
+        throw new IssuanceAuthorizationError(
+          "UNAUTHENTICATED",
+          "Authenticated issuer principal is invalid",
+        );
+      }
+      return principal;
     }
+    return undefined;
+  };
+
+  const consumeStateAuthenticationRateLimit = async (
+    request: Request,
+    response: Response,
+  ): Promise<boolean> => {
+    if (!options.issuanceAuthenticator || !options.rateLimiter) return true;
+    const networkActor = networkStateId(request);
+    const limit = await options.rateLimiter.consume(
+      `state:authenticate:ip:${networkActor}`,
+    );
+    response.setHeader("x-ratelimit-remaining", String(limit.remaining));
+    if (limit.allowed) return true;
+    response.setHeader(
+      "retry-after",
+      String(Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1_000))),
+    );
+    sendProblem(response, 429, "RATE_LIMITED");
+    return false;
+  };
+
+  const consumeStateRateLimit = async (
+    request: Request,
+    response: Response,
+    action: string,
+    principal: AnyIssuancePrincipal | undefined,
+  ): Promise<boolean> => {
+    if (!options.rateLimiter) return true;
+    const actor =
+      principal === undefined
+        ? `ip:${networkStateId(request)}`
+        : `tenant:${tenantStateId(principal)}`;
+    const limit = await options.rateLimiter.consume(`state:${action}:${actor}`);
+    response.setHeader("x-ratelimit-remaining", String(limit.remaining));
+    if (limit.allowed) return true;
+    response.setHeader(
+      "retry-after",
+      String(Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1_000))),
+    );
+    sendProblem(response, 429, "RATE_LIMITED");
+    return false;
   };
 
   const handoffBearer = (request: Request): string | undefined => {
@@ -301,8 +469,9 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
     "/v1/requirements",
     async (request: Request, response: Response) => {
       if (options.rateLimiter) {
-        const key = request.ip ?? "unknown";
-        const limit = await options.rateLimiter.consume(`issue:${key}`);
+        const limit = await options.rateLimiter.consume(
+          `issue:ip:${networkStateId(request)}`,
+        );
         response.setHeader("x-ratelimit-remaining", String(limit.remaining));
         if (!limit.allowed) {
           response.setHeader("retry-after", "1");
@@ -314,10 +483,13 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
         return sendProblem(response, 400, "INVALID_REQUIREMENT");
       }
       try {
+        let tenantId: string | undefined;
         if (options.issuanceAuthenticator) {
-          const principal = await options.issuanceAuthenticator.authenticate({
-            authorizationHeader: request.get("authorization") ?? null,
-          });
+          const principal = validateIssuancePrincipal(
+            await options.issuanceAuthenticator.authenticate({
+              authorizationHeader: request.get("authorization") ?? null,
+            }),
+          );
           authorizeIssuance(
             principal,
             {
@@ -329,6 +501,7 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
             },
             profile,
           );
+          tenantId = tenantStateId(principal);
         }
         const accepts = exactMethods(parsed.data.accepts);
         let providerRequests: Readonly<Record<string, unknown>>;
@@ -366,7 +539,11 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
           ttlSeconds: parsed.data.ttlSeconds,
           providerRequests,
         });
-        await requirementStore.put(requirement);
+        if (tenantId === undefined) {
+          await requirementStore.put(requirement);
+        } else {
+          await tenantRequirementStore!.putForTenant(requirement, tenantId);
+        }
         try {
           await options.service.register(requirement);
         } catch (error) {
@@ -403,17 +580,40 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.get(
     "/v1/requirements/:dependencyId",
     async (request: Request, response: Response) => {
-      const dependencyId = request.params.dependencyId;
-      if (typeof dependencyId !== "string") {
+      response.set("cache-control", "no-store, private");
+      response.vary("authorization");
+      const parsedDependencyId = StateResourceIdSchema.safeParse(
+        request.params.dependencyId,
+      );
+      if (!parsedDependencyId.success) {
         return sendProblem(response, 400, "INVALID_DEPENDENCY");
       }
+      const dependencyId = parsedDependencyId.data;
       try {
-        await authenticateStateRequest(request);
-        const requirement = await requirementStore.get(dependencyId);
+        if (!(await consumeStateAuthenticationRateLimit(request, response))) {
+          return response;
+        }
+        const principal = await authenticateStateRequest(request);
+        if (
+          !(await consumeStateRateLimit(
+            request,
+            response,
+            "requirement-read",
+            principal,
+          ))
+        ) {
+          return response;
+        }
+        const requirement =
+          principal === undefined
+            ? await requirementStore.get(dependencyId)
+            : await tenantRequirementStore!.getForTenant(
+                dependencyId,
+                tenantStateId(principal),
+              );
         if (!requirement) {
           return sendProblem(response, 404, "DEPENDENCY_NOT_FOUND");
         }
-        response.set("cache-control", "no-store, private");
         return response.json({ requirement });
       } catch (error) {
         observeInternal(
@@ -430,14 +630,40 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.delete(
     "/v1/requirements/:dependencyId",
     async (request: Request, response: Response) => {
-      const dependencyId = request.params.dependencyId;
-      if (typeof dependencyId !== "string") {
+      response.set("cache-control", "no-store, private");
+      response.vary("authorization");
+      const parsedDependencyId = StateResourceIdSchema.safeParse(
+        request.params.dependencyId,
+      );
+      if (!parsedDependencyId.success) {
         return sendProblem(response, 400, "INVALID_DEPENDENCY");
       }
+      const dependencyId = parsedDependencyId.data;
       try {
-        await authenticateStateRequest(request);
-        await requirementStore.delete(dependencyId);
-        response.set("cache-control", "no-store, private");
+        if (!(await consumeStateAuthenticationRateLimit(request, response))) {
+          return response;
+        }
+        const principal = await authenticateStateRequest(request);
+        if (
+          !(await consumeStateRateLimit(
+            request,
+            response,
+            "requirement-delete",
+            principal,
+          ))
+        ) {
+          return response;
+        }
+        if (principal === undefined) {
+          await requirementStore.delete(dependencyId);
+        } else if (
+          !(await tenantRequirementStore!.deleteForTenant(
+            dependencyId,
+            tenantStateId(principal),
+          ))
+        ) {
+          return sendProblem(response, 404, "DEPENDENCY_NOT_FOUND");
+        }
         return response.status(204).end();
       } catch (error) {
         observeInternal(
@@ -465,7 +691,7 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
       try {
         if (options.rateLimiter) {
           const limit = await options.rateLimiter.consume(
-            `handoff:${request.ip ?? "unknown"}`,
+            `handoff:ip:${networkStateId(request)}`,
           );
           if (!limit.allowed) return sendProblem(response, 429, "RATE_LIMITED");
         }
@@ -492,6 +718,8 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.get(
     "/v1/handoffs/:handoffId",
     async (request: Request, response: Response) => {
+      response.set("cache-control", "no-store, private");
+      response.vary("authorization");
       if (!options.handoffService) {
         return sendProblem(response, 404, "HANDOFF_DISABLED");
       }
@@ -501,8 +729,17 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
         return sendProblem(response, 401, "HANDOFF_UNAUTHORIZED");
       }
       try {
+        if (
+          !(await consumeStateRateLimit(
+            request,
+            response,
+            "handoff-poll",
+            undefined,
+          ))
+        ) {
+          return response;
+        }
         const view = await options.handoffService.poll(handoffId, accessToken);
-        response.set("cache-control", "no-store, private");
         return response.json(view);
       } catch (error) {
         observeInternal(
@@ -519,6 +756,8 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.delete(
     "/v1/handoffs/:handoffId",
     async (request: Request, response: Response) => {
+      response.set("cache-control", "no-store, private");
+      response.vary("authorization");
       if (!options.handoffService) {
         return sendProblem(response, 404, "HANDOFF_DISABLED");
       }
@@ -527,12 +766,21 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
       if (typeof handoffId !== "string" || !accessToken) {
         return sendProblem(response, 401, "HANDOFF_UNAUTHORIZED");
       }
+      if (
+        !(await consumeStateRateLimit(
+          request,
+          response,
+          "handoff-cancel",
+          undefined,
+        ))
+      ) {
+        return response;
+      }
       const cancelled = await options.handoffService.cancel(
         handoffId,
         accessToken,
       );
       if (!cancelled) return sendProblem(response, 404, "HANDOFF_NOT_FOUND");
-      response.set("cache-control", "no-store, private");
       return response.status(204).end();
     },
   );
@@ -540,21 +788,55 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.post(
     "/v1/results/:resultId/consume",
     async (request: Request, response: Response) => {
+      response.set("cache-control", "no-store, private");
+      response.vary("authorization");
       if (!options.resultReplayStore) {
         return sendProblem(response, 404, "STATE_ENDPOINT_DISABLED");
       }
-      const resultId = request.params.resultId;
+      const parsedResultId = StateResourceIdSchema.safeParse(
+        request.params.resultId,
+      );
       const parsed = ResultConsumeSchema.safeParse(request.body);
-      if (typeof resultId !== "string" || !parsed.success) {
+      if (
+        !parsedResultId.success ||
+        !parsed.success ||
+        !boundedFutureExpiry(parsed.data.expiresAt, maximumStateTtlSeconds)
+      ) {
         return sendProblem(response, 400, "INVALID_RESULT_CONSUMPTION");
       }
+      const resultId = parsedResultId.data;
       try {
-        await authenticateStateRequest(request);
-        const consumed = await options.resultReplayStore.consume(
-          resultId,
-          parsed.data.expiresAt,
-        );
-        response.set("cache-control", "no-store, private");
+        if (!(await consumeStateAuthenticationRateLimit(request, response))) {
+          return response;
+        }
+        const principal = await authenticateStateRequest(request);
+        if (
+          !(await consumeStateRateLimit(
+            request,
+            response,
+            "result-consume",
+            principal,
+          ))
+        ) {
+          return response;
+        }
+        const tenantId =
+          principal === undefined
+            ? "dev-local-unauthenticated"
+            : tenantStateId(principal);
+        const scopedResultId = scopedStateId(tenantId, resultId);
+        const consumed = isLegacyAwareResultReplayStore(
+          options.resultReplayStore,
+        )
+          ? await options.resultReplayStore.consumeWithLegacy(
+              scopedResultId,
+              resultId,
+              parsed.data.expiresAt,
+            )
+          : await options.resultReplayStore.consume(
+              scopedResultId,
+              parsed.data.expiresAt,
+            );
         return response.json({ consumed });
       } catch (error) {
         observeInternal(
@@ -571,23 +853,56 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
   router.post(
     "/v1/results/:resultId/acceptances",
     async (request: Request, response: Response) => {
+      response.set("cache-control", "no-store, private");
+      response.vary("authorization");
       if (!options.resultAcceptanceStore) {
         return sendProblem(response, 404, "STATE_ENDPOINT_DISABLED");
       }
-      const resultId = request.params.resultId;
+      const parsedResultId = StateResourceIdSchema.safeParse(
+        request.params.resultId,
+      );
       const parsed = ResultAcceptanceSchema.safeParse(request.body);
-      if (typeof resultId !== "string" || !parsed.success) {
+      if (
+        !parsedResultId.success ||
+        !parsed.success ||
+        !boundedFutureExpiry(parsed.data.expiresAt, maximumStateTtlSeconds)
+      ) {
         return sendProblem(response, 400, "INVALID_RESULT_ACCEPTANCE");
       }
+      const resultId = parsedResultId.data;
       try {
-        await authenticateStateRequest(request);
-        const status = await options.resultAcceptanceStore.accept({
-          resultId,
+        if (!(await consumeStateAuthenticationRateLimit(request, response))) {
+          return response;
+        }
+        const principal = await authenticateStateRequest(request);
+        if (
+          !(await consumeStateRateLimit(
+            request,
+            response,
+            "result-accept",
+            principal,
+          ))
+        ) {
+          return response;
+        }
+        const tenantId =
+          principal === undefined
+            ? "dev-local-unauthenticated"
+            : tenantStateId(principal);
+        const input = {
+          resultId: scopedStateId(tenantId, resultId),
           operationId: parsed.data.operationId,
           requestDigest: parsed.data.requestDigest,
           expiresAt: parsed.data.expiresAt,
-        });
-        response.set("cache-control", "no-store, private");
+        };
+        const status = isLegacyAwareResultAcceptanceStore(
+          options.resultAcceptanceStore,
+        )
+          ? await options.resultAcceptanceStore.acceptWithLegacy(
+              input,
+              resultId,
+            )
+          : await options.resultAcceptanceStore.accept(input);
         return response.json({ status });
       } catch (error) {
         observeInternal(
@@ -605,8 +920,9 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
     "/v1/requirements/:dependencyId/verify",
     async (request: Request, response: Response) => {
       if (options.rateLimiter) {
-        const key = request.ip ?? "unknown";
-        const limit = await options.rateLimiter.consume(`verify:${key}`);
+        const limit = await options.rateLimiter.consume(
+          `verify:ip:${networkStateId(request)}`,
+        );
         response.setHeader("x-ratelimit-remaining", String(limit.remaining));
         if (!limit.allowed) {
           response.setHeader("retry-after", "1");

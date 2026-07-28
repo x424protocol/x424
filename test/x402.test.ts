@@ -15,6 +15,7 @@ import {
   sha256,
   signHumanResult,
 } from "../src/index.js";
+import { finalizeFetchX424Response } from "../src/fetch.js";
 import { protectFetchResource } from "../src/middleware/resource.js";
 
 function challenge() {
@@ -179,12 +180,18 @@ describe("x424 before x402", () => {
       const protectedResult = await protectFetchResource(request, options);
       if (protectedResult.response) return protectedResult.response;
       if (!request.headers.has("payment-signature")) {
-        return new Response(null, {
-          status: 402,
-          headers: { "payment-required": "x402-challenge" },
-        });
+        return finalizeFetchX424Response(
+          new Response(null, {
+            status: 402,
+            headers: { "payment-required": "x402-challenge" },
+          }),
+          protectedResult.responseHeaders,
+        );
       }
-      return new Response("created", { status: 201 });
+      return finalizeFetchX424Response(
+        new Response("created", { status: 201 }),
+        protectedResult.responseHeaders,
+      );
     };
 
     const response = await fetchWithX424AndX402(
@@ -229,13 +236,23 @@ describe("x424 before x402", () => {
             keys.signer,
           ),
         }),
-        resolvePaymentDependency: async () => ({
-          paymentSignature: "payment-token",
-        }),
+        resolvePaymentDependency: async ({ response }) => {
+          expect(response.headers.get("cache-control")).toBe(
+            "private, no-store",
+          );
+          expect(response.headers.get("vary")?.toLowerCase()).toContain(
+            "human-proof",
+          );
+          return { paymentSignature: "payment-token" };
+        },
       },
     );
 
     expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("vary")?.toLowerCase()).toContain(
+      "human-proof",
+    );
     await expect(
       resultAcceptanceStore.accept({
         resultId: "x424_result_real_x402",

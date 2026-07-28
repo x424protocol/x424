@@ -16,6 +16,7 @@ services:
     environment:
       X424_DEPLOYMENT_PROFILE: dev-local-0.1
       X424_PROVIDER_REQUEST_MODE: verifier
+      X424_REDIS_TOPOLOGY: single-endpoint
       REDIS_URL: redis://redis:6379
       X424_PAIRWISE_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       X424_HANDOFF_STATE_KEY: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"

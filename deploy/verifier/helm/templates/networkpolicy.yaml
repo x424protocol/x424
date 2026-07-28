@@ -3,6 +3,12 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: x424-verifier
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 spec:
   podSelector:
     matchLabels:
@@ -13,23 +19,49 @@ spec:
     - ports:
         - protocol: TCP
           port: 8080
-{{- if or .Values.networkPolicy.worldCidrs .Values.networkPolicy.redisCidrs }}
   egress:
+    # Kubernetes NetworkPolicy has no portable FQDN selector. DNS is required
+    # for the World and Redis hostnames configured through the Secret.
+{{- if .Values.networkPolicy.dnsCidrs }}
+    - to:
+{{- range .Values.networkPolicy.dnsCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+      ports:
+{{- else }}
+    - ports:
+{{- end }}
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- if .Values.networkPolicy.worldCidrs }}
     - to:
 {{- range .Values.networkPolicy.worldCidrs }}
         - ipBlock:
             cidr: {{ . | quote }}
 {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.worldPort }}
+{{- else }}
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.worldPort }}
+{{- end }}
+{{- if .Values.networkPolicy.redisCidrs }}
+    - to:
 {{- range .Values.networkPolicy.redisCidrs }}
         - ipBlock:
             cidr: {{ . | quote }}
 {{- end }}
       ports:
         - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 6379
+          port: {{ .Values.networkPolicy.redisPort }}
 {{- else }}
-  egress: []
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.redisPort }}
 {{- end }}
 {{- end }}

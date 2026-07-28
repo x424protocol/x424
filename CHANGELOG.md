@@ -6,6 +6,67 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+## 0.1.3 - 2026-07-27
+
+### Security
+
+- Bound retained requirements, result consumption, and mutation acceptance to
+  the authenticated issuer tenant. Tenant namespaces include both issuer and
+  subject, and stored state keys receive only one-way scoped identifiers.
+- Made authenticated non-development routers fail closed unless a custom
+  requirement backend implements the explicit
+  `TenantIsolatedRequirementStore` contract. Generic ownerless stores remain a
+  local-development compatibility surface only.
+- Hardened static bearer authentication with strict principal validation,
+  digest-only token indexing, uniform failures, authentication/state rate
+  limits, and a 15-minute maximum lifetime for caller-supplied result state.
+- Added an atomic old-key check to the maintained in-memory, Redis, and
+  PostgreSQL result stores as defense in depth during the namespace cutover.
+  Authenticated routers reject base-only custom result stores; the required
+  maintenance drain still applies.
+- Forced protected Fetch, Express, and Next.js responses to remain private and
+  non-cacheable, including successful downstream application and x402
+  responses. Express header mutation cannot remove the protection boundary.
+
+### Fixed
+
+- Split browser-safe client code from Node-only modules and added a packed
+  browser-bundle smoke test that rejects Node built-ins and exercises the
+  complete `424 → proof → 201` exchange.
+- Sent both World staging and production verification to the canonical
+  `https://developer.world.org/api/v4/verify/{rp_id}` endpoint while preserving
+  exact IDKit result forwarding.
+- Corrected the OpenAPI requirement-state `DELETE` contract: an absent or
+  tenant-inaccessible dependency is `404`, not a successful idempotent delete.
+- Added strict Helm values/schema validation, one-process deployment guards,
+  disruption and egress policy templates, Kubernetes schema checks, and a
+  non-root container smoke test.
+- Added an exact trusted-proxy hop setting for IP-based abuse controls and
+  made the chart reject `prod-ha-0.2` unless DNS, World, and Redis egress CIDR
+  allowlists and an immutable image digest are all explicit.
+
+### Changed
+
+- Low-level Fetch integrations that call `protectFetch()` or
+  `protectFetchResource()` directly must apply the returned
+  `responseHeaders` with `finalizeFetchX424Response()` to every downstream
+  response. `createFetchX424Handler()` performs this finalization
+  automatically.
+- The 0.1.3 Helm chart is staged with the `0.1.3` image tag and no digest. The
+  released image digest must be recorded and pinned before valuable traffic;
+  the chart no longer points at the previous 0.1.2 image.
+- `RedisX424Store` now requires an explicit `single-endpoint` topology. Redis
+  Cluster is unsupported during the legacy/new-key atomic migration because
+  pre-0.1.3 keys do not share a hash slot.
+
+### Upgrade action
+
+- This release changes ownerless state keys to tenant-scoped keys. Stop all
+  old verifier and protected-resource traffic, wait at least 15 minutes, and
+  only then deploy 0.1.3. Follow
+  [`docs/runbooks/state-namespace-0.1.3.md`](docs/runbooks/state-namespace-0.1.3.md);
+  rolling upgrades and immediate rollback are unsafe during this transition.
+
 ## 0.1.2 - 2026-07-22
 
 ### Fixed

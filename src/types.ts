@@ -224,10 +224,46 @@ export interface RequirementStore {
   delete(dependencyId: string): Promise<void>;
 }
 
+/**
+ * Requirement storage with durable administrative ownership. Verifier-internal
+ * reads remain unscoped so proof and handoff flows can resolve a public
+ * dependency ID; authenticated management APIs must use the tenant-scoped
+ * methods.
+ */
+export interface TenantIsolatedRequirementStore extends RequirementStore {
+  readonly tenantIsolation: true;
+  putForTenant(requirement: HumanRequirement, tenantId: string): Promise<void>;
+  getForTenant(
+    dependencyId: string,
+    tenantId: string,
+    now?: Date,
+  ): Promise<HumanRequirement | undefined>;
+  /**
+   * Delete only when the dependency belongs to `tenantId`. False also covers
+   * unknown dependencies so callers do not disclose another tenant's state.
+   */
+  deleteForTenant(dependencyId: string, tenantId: string): Promise<boolean>;
+}
+
 export interface ResultReplayStore {
   /** Atomically marks a result ID used. False means it was already consumed. */
   consume(
     resultId: string,
+    expiresAt: IsoTimestamp,
+    now?: Date,
+  ): Promise<boolean>;
+}
+
+/**
+ * Optional capability for stores that can atomically reject unexpired
+ * pre-0.1.3 result keys while writing the tenant-scoped key. Custom stores
+ * without this capability must drain legacy result state before upgrading.
+ */
+export interface LegacyAwareResultReplayStore extends ResultReplayStore {
+  readonly legacyResultStateMigration: true;
+  consumeWithLegacy(
+    resultId: string,
+    legacyResultId: string,
     expiresAt: IsoTimestamp,
     now?: Date,
   ): Promise<boolean>;
@@ -252,6 +288,16 @@ export interface ResultAcceptanceInput {
 export interface ResultAcceptanceStore {
   accept(
     input: ResultAcceptanceInput,
+    now?: Date,
+  ): Promise<ResultAcceptanceStatus>;
+}
+
+/** Atomic legacy-key migration counterpart to LegacyAwareResultReplayStore. */
+export interface LegacyAwareResultAcceptanceStore extends ResultAcceptanceStore {
+  readonly legacyResultStateMigration: true;
+  acceptWithLegacy(
+    input: ResultAcceptanceInput,
+    legacyResultId: string,
     now?: Date,
   ): Promise<ResultAcceptanceStatus>;
 }

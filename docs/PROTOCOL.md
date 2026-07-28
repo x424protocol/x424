@@ -123,6 +123,18 @@ and `docs/decisions/0003-canonicalization-candidate.md`.
 HTTP 424 + Problem Details remains the canonical challenge, with
 `Cache-Control: no-store, private` and `Vary: HUMAN-PROOF`.
 
+Every response produced by a protected route—including a successful retry and
+an error after proof submission—MUST use `Cache-Control: private, no-store` and
+MUST include `HUMAN-PROOF` in `Vary`. Shared caches and CDNs MUST bypass x424
+protected routes. Caching a successful representation can bypass proof
+verification and single-use replay enforcement even when the initial 424
+challenge itself is not cached.
+
+Maintained framework adapters apply these headers to downstream responses. A
+consumer of the low-level Fetch protection API MUST merge its returned
+`responseHeaders` into every downstream response, including another dependency
+challenge such as x402's 402 and the final success response.
+
 Supported requirement transports in x424/0.1:
 
 - `header` — `HUMAN-REQUIRED` carries base64url(canonical JSON) when the encoded

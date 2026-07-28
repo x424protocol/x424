@@ -3,7 +3,7 @@ import {
   HUMAN_REQUIRED_HEADER,
   HUMAN_RESULT_HEADER,
   requirementFromChallenge,
-} from "./http.js";
+} from "./http-client.js";
 import { methodKey } from "./catalog.js";
 import {
   assertChallengeRequestMatch,

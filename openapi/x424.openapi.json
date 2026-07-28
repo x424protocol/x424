@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "x424 Unique-Human Dependency API",
-    "version": "0.1.0",
+    "version": "0.1.3",
     "description": "x424 makes unique humanity a native HTTP dependency—for users, agents, and APIs. This reference API issues and satisfies exact unique-human dependencies; a successful result is evidence for one bound dependency, not general identity or application authorization."
   },
   "servers": [
@@ -127,7 +127,8 @@
           }
         ],
         "responses": {
-          "204": { "description": "Deleted or already absent" }
+          "204": { "description": "Requirement state deleted" },
+          "404": { "$ref": "#/components/responses/Problem" }
         }
       }
     },
@@ -136,6 +137,7 @@
         "operationId": "verifyHumanProof",
         "summary": "Verify the selected provider proof and satisfy a dependency",
         "description": "Provider-native proof is handled inside the selected adapter. The response omits provider nullifiers and raw proofs.",
+        "security": [],
         "parameters": [
           {
             "name": "dependencyId",

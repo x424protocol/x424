@@ -8,7 +8,10 @@ import type { StoredHumanHandoff } from "../src/handoff.js";
 
 class MemoryPg {
   nonces = new Map<string, { nonce: string; expiresAt: string }>();
-  requirements = new Map<string, { document: string; expiresAt: string }>();
+  requirements = new Map<
+    string,
+    { document: string; expiresAt: string; ownerId?: string }
+  >();
   providers = new Set<string>();
   results = new Set<string>();
   acceptances = new Map<
@@ -56,9 +59,11 @@ class MemoryPg {
       if (this.requirements.has(String(params[0]))) {
         return { rowCount: 0, rows: [] };
       }
+      const owned = text.includes("owner_id");
       this.requirements.set(String(params[0]), {
-        document: String(params[1]),
-        expiresAt: String(params[2]),
+        document: String(params[owned ? 2 : 1]),
+        expiresAt: String(params[owned ? 3 : 2]),
+        ...(owned ? { ownerId: String(params[1]) } : {}),
       });
       return { rowCount: 1, rows: [] };
     }
@@ -107,7 +112,12 @@ class MemoryPg {
     }
     if (text.includes("SELECT document")) {
       const entry = this.requirements.get(String(params[0]));
-      if (!entry) return { rowCount: 0, rows: [] };
+      if (
+        !entry ||
+        (text.includes("owner_id = $2") && entry.ownerId !== params[1])
+      ) {
+        return { rowCount: 0, rows: [] };
+      }
       return {
         rowCount: 1,
         rows: [
@@ -119,6 +129,13 @@ class MemoryPg {
       };
     }
     if (text.includes("DELETE FROM x424_requirements")) {
+      const entry = this.requirements.get(String(params[0]));
+      if (
+        text.includes("owner_id = $2") &&
+        (!entry || entry.ownerId !== params[1])
+      ) {
+        return { rowCount: 0, rows: [] };
+      }
       this.requirements.delete(String(params[0]));
       return { rowCount: 1, rows: [] };
     }
@@ -129,12 +146,55 @@ class MemoryPg {
       this.providers.add(String(params[0]));
       return { rowCount: 1, rows: [{ digest: params[0] }] };
     }
+    if (
+      text.includes("WITH legacy_result") &&
+      text.includes("INSERT INTO x424_results")
+    ) {
+      const scopedResultId = String(params[0]);
+      const legacyResultId = String(params[1]);
+      const consumed =
+        !this.results.has(legacyResultId) && !this.results.has(scopedResultId);
+      if (consumed) this.results.add(scopedResultId);
+      return { rowCount: 1, rows: [{ consumed }] };
+    }
     if (text.includes("INSERT INTO x424_results")) {
       if (this.results.has(String(params[0]))) {
         return { rowCount: 0, rows: [] };
       }
       this.results.add(String(params[0]));
       return { rowCount: 1, rows: [{ result_id: params[0] }] };
+    }
+    if (
+      text.includes("WITH legacy_result") &&
+      text.includes("INSERT INTO x424_result_acceptances")
+    ) {
+      const scopedResultId = String(params[0]);
+      const legacyResultId = String(params[1]);
+      const operationId = String(params[2]);
+      const requestDigest = String(params[3]);
+      const existing =
+        this.acceptances.get(legacyResultId) ??
+        this.acceptances.get(scopedResultId);
+      if (!existing) {
+        this.acceptances.set(scopedResultId, {
+          operationId,
+          requestDigest,
+          expiresAt: String(params[5]),
+        });
+        return { rowCount: 1, rows: [{ status: "new" }] };
+      }
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            status:
+              existing.operationId === operationId &&
+              existing.requestDigest === requestDigest
+                ? "same_operation"
+                : "replay",
+          },
+        ],
+      };
     }
     if (text.includes("INSERT INTO x424_result_acceptances")) {
       const resultId = String(params[0]);
@@ -211,6 +271,23 @@ describe("PostgresX424Store", () => {
     expect(await store.results.consume("r1", requirement.expiresAt)).toBe(
       false,
     );
+    expect(
+      await store.results.consume("legacy-result", requirement.expiresAt),
+    ).toBe(true);
+    expect(
+      await store.results.consumeWithLegacy(
+        "tenant-scoped-result",
+        "legacy-result",
+        requirement.expiresAt,
+      ),
+    ).toBe(false);
+    expect(
+      await store.results.consumeWithLegacy(
+        "tenant-scoped-new-result",
+        "unused-legacy-result",
+        requirement.expiresAt,
+      ),
+    ).toBe(true);
     const acceptance = {
       resultId: "r-x402",
       operationId: "operation-1",
@@ -227,6 +304,27 @@ describe("PostgresX424Store", () => {
         requestDigest: "sha256:different",
       }),
     ).toBe("replay");
+    const legacyAcceptance = {
+      ...acceptance,
+      resultId: "legacy-acceptance",
+    };
+    expect(await store.resultAcceptances.accept(legacyAcceptance)).toBe("new");
+    expect(
+      await store.resultAcceptances.acceptWithLegacy(
+        { ...legacyAcceptance, resultId: "tenant-scoped-acceptance" },
+        "legacy-acceptance",
+      ),
+    ).toBe("same_operation");
+    expect(
+      await store.resultAcceptances.acceptWithLegacy(
+        {
+          ...legacyAcceptance,
+          resultId: "tenant-scoped-acceptance",
+          operationId: "different-operation",
+        },
+        "legacy-acceptance",
+      ),
+    ).toBe("replay");
     await expect(
       store.providers.consume({
         providerId: "world",
@@ -242,6 +340,38 @@ describe("PostgresX424Store", () => {
         uniquenessScope: { kind: "action", id: "two" },
         subjectDigest: "hmac-sha256:same",
       }),
+    ).resolves.toBe(true);
+  });
+
+  it("persists requirement ownership for authenticated management", async () => {
+    const store = new PostgresX424Store({ client: new MemoryPg() });
+    const requirement = createHumanRequirement({
+      purpose: "publish-record",
+      method: "POST",
+      uri: "https://api.example.test/records",
+      audience: "https://api.example.test",
+      binding: { kind: "agent_key", value: "sha256:tenant" },
+      accepts: [
+        {
+          providerId: "example",
+          methodId: "unique-human",
+          descriptorVersion: "1",
+          acceptedScopeKinds: ["relying_party"],
+        },
+      ],
+    });
+    await store.requirements.putForTenant(requirement, "tenant-a");
+    await expect(
+      store.requirements.getForTenant(requirement.dependencyId, "tenant-b"),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.requirements.deleteForTenant(requirement.dependencyId, "tenant-b"),
+    ).resolves.toBe(false);
+    await expect(
+      store.requirements.getForTenant(requirement.dependencyId, "tenant-a"),
+    ).resolves.toEqual(requirement);
+    await expect(
+      store.requirements.deleteForTenant(requirement.dependencyId, "tenant-a"),
     ).resolves.toBe(true);
   });
 

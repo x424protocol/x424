@@ -1,6 +1,7 @@
 /**
  * Strict base64url and SHA-256 digest decoding for x424 wire objects.
- * Rejects permissive Buffer.from(..., "base64url") ignored-character behavior.
+ * The implementation uses browser globals instead of Node's permissive Buffer
+ * decoder so portable entrypoints never require a Buffer polyfill.
  */
 
 const BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
@@ -25,22 +26,34 @@ export function decodeStrictBase64Url(
     throw new EncodingError(`Invalid ${label} alphabet`);
   }
   const padLen = (4 - (value.length % 4)) % 4;
-  const padded = value + "=".repeat(padLen);
-  let buf: Buffer;
+  const padded =
+    value.replaceAll("-", "+").replaceAll("_", "/") + "=".repeat(padLen);
+  let binary: string;
   try {
-    buf = Buffer.from(padded, "base64");
+    binary = atob(padded);
   } catch {
     throw new EncodingError(`Malformed ${label}`);
   }
-  // Node may ignore some invalid padding forms; enforce exact round-trip.
-  if (buf.toString("base64url") !== value) {
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  // Enforce exact canonical round-trip, including rejected trailing bits.
+  if (encodeStrictBase64Url(bytes) !== value) {
     throw new EncodingError(`Non-canonical ${label}`);
   }
-  return new Uint8Array(buf);
+  return bytes;
 }
 
 export function encodeStrictBase64Url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
+  let binary = "";
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    binary += String.fromCharCode(bytes[index]!);
+  }
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
 }
 
 /** Validate `sha256:` + canonical base64url of exactly 32 bytes. */

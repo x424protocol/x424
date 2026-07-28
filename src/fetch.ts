@@ -6,6 +6,7 @@ import {
   type FetchProtectResult,
   type ProtectOptions,
 } from "./middleware/resource.js";
+import { mergeVary } from "./transport.js";
 import type { HumanResult } from "./types.js";
 
 export type FetchProtectedHandler = (
@@ -34,6 +35,29 @@ export async function protectFetch(
   });
 }
 
+/**
+ * Apply the mandatory cache and CORS headers returned by the x424 protection
+ * step to the application response.
+ */
+export function finalizeFetchX424Response(
+  response: Response,
+  protectionHeaders: Headers,
+): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of protectionHeaders) {
+    if (name.toLowerCase() === "vary") {
+      headers.set("vary", mergeVary(headers.get("vary") ?? undefined, value));
+    } else {
+      headers.set(name, value);
+    }
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 /** Framework-neutral handler for Workers, Bun, Deno, Node, and edge runtimes. */
 export function createFetchX424Handler(
   options: ProtectOptions,
@@ -45,6 +69,9 @@ export function createFetchX424Handler(
     if (!protectedRequest.result) {
       throw new Error("x424 protection completed without a human result");
     }
-    return handler(request, protectedRequest.result);
+    return finalizeFetchX424Response(
+      await handler(request, protectedRequest.result),
+      protectedRequest.responseHeaders,
+    );
   };
 }

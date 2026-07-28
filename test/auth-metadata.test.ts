@@ -92,6 +92,70 @@ describe("issuance authorization", () => {
     ).toThrow(/not authorized for an accepted method/);
   });
 
+  it("accepts only explicitly configured own bearer credentials", async () => {
+    const auth = createStaticBearerIssuanceAuthenticator({
+      configured: principal({ subject: "configured-principal" }),
+    });
+
+    await expect(
+      auth.authenticate({
+        authorizationHeader: "Bearer toString",
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await expect(
+      auth.authenticate({
+        authorizationHeader: "Bearer configured ",
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    await expect(
+      auth.authenticate({
+        authorizationHeader: "Bearer configured",
+      }),
+    ).resolves.toMatchObject({ subject: "configured-principal" });
+
+    const failures = await Promise.all(
+      [null, "Basic configured", "Bearer unknown"].map(
+        async (authorizationHeader) => {
+          try {
+            await auth.authenticate({ authorizationHeader });
+            throw new Error("authentication unexpectedly succeeded");
+          } catch (error) {
+            return error as IssuanceAuthorizationError;
+          }
+        },
+      ),
+    );
+    expect(new Set(failures.map((error) => error.code))).toEqual(
+      new Set(["UNAUTHENTICATED"]),
+    );
+    expect(new Set(failures.map((error) => error.message)).size).toBe(1);
+  });
+
+  it("validates and snapshots configured principals", async () => {
+    const mutablePurposes = ["publish-record"];
+    const configured = principal({ allowedPurposes: mutablePurposes });
+    const auth = createStaticBearerIssuanceAuthenticator({
+      configured: configured,
+    });
+    mutablePurposes.push("post-configuration-change");
+
+    const authenticated = await auth.authenticate({
+      authorizationHeader: "Bearer configured",
+    });
+    expect((authenticated as IssuancePrincipal).allowedPurposes).toEqual([
+      "publish-record",
+    ]);
+    expect(Object.isFrozen(authenticated)).toBe(true);
+
+    expect(() =>
+      createStaticBearerIssuanceAuthenticator({
+        malformed: {
+          subject: "issuer-1",
+        } as IssuancePrincipal,
+      }),
+    ).toThrow(IssuanceAuthorizationError);
+  });
+
   it("rejects URI prefix confusion against sibling hosts and paths", () => {
     const grants = [{ origin: "https://example.com", pathPrefix: "/records" }];
     expect(resourceUriAuthorized("https://example.com/records", grants)).toBe(

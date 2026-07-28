@@ -46,6 +46,21 @@ class FakeRedisClient implements RedisCommandClient {
         return [current, Number(expectedNonce)];
       }
       if (nonceKey.includes(":acceptance:")) {
+        if (arguments_[2] === "2") {
+          const legacyKey = arguments_[4]!;
+          const value = arguments_[5]!;
+          const expiresAtMs = Number(arguments_[6]);
+          this.#expire(nonceKey);
+          this.#expire(legacyKey);
+          const existing =
+            this.values.get(legacyKey)?.value ??
+            this.values.get(nonceKey)?.value;
+          if (existing === undefined) {
+            this.values.set(nonceKey, { value, expiresAtMs });
+            return 1;
+          }
+          return existing === value ? 2 : 0;
+        }
         const expiresAtMs = Number(arguments_[5]);
         this.#expire(nonceKey);
         const existing = this.values.get(nonceKey)?.value;
@@ -57,6 +72,15 @@ class FakeRedisClient implements RedisCommandClient {
           return 1;
         }
         return existing === expectedNonce ? 2 : 0;
+      }
+      if (nonceKey.includes(":result:") && arguments_[2] === "2") {
+        const legacyKey = arguments_[4]!;
+        const expiresAtMs = Number(arguments_[5]);
+        this.#expire(nonceKey);
+        this.#expire(legacyKey);
+        if (this.values.has(legacyKey) || this.values.has(nonceKey)) return 0;
+        this.values.set(nonceKey, { value: "1", expiresAtMs });
+        return 1;
       }
       if (script.includes("ARGV[4] == '1'")) {
         const dependencyKey = arguments_[4]!;
@@ -108,7 +132,7 @@ class FakeRedisClient implements RedisCommandClient {
 
 // Compile-time contract: the official Redis client can be passed directly.
 const officialClientCompatibility = (client: RedisClientType) =>
-  new RedisX424Store({ client });
+  new RedisX424Store({ client, topology: "single-endpoint" });
 void officialClientCompatibility;
 
 function requirement() {
@@ -149,9 +173,27 @@ function handoff(
 }
 
 describe("Redis x424 state", () => {
+  it("rejects an implicit or clustered Redis topology", () => {
+    const client = new FakeRedisClient();
+    expect(
+      () =>
+        new RedisX424Store({
+          client,
+        } as unknown as ConstructorParameters<typeof RedisX424Store>[0]),
+    ).toThrow(/single-endpoint/);
+    expect(
+      () =>
+        new RedisX424Store({
+          client,
+          topology: "cluster",
+        } as unknown as ConstructorParameters<typeof RedisX424Store>[0]),
+    ).toThrow(/Redis Cluster is unsupported/);
+  });
+
   it("stores requirements and atomically consumes nonces and results", async () => {
     const state = new RedisX424Store({
       client: new FakeRedisClient(),
+      topology: "single-endpoint",
       keyPrefix: "test-x424",
     });
     const required = requirement();
@@ -179,6 +221,23 @@ describe("Redis x424 state", () => {
     await expect(
       state.results.consume("result-1", required.expiresAt),
     ).resolves.toBe(false);
+    await expect(
+      state.results.consume("legacy-result", required.expiresAt),
+    ).resolves.toBe(true);
+    await expect(
+      state.results.consumeWithLegacy(
+        "tenant-scoped-result",
+        "legacy-result",
+        required.expiresAt,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      state.results.consumeWithLegacy(
+        "tenant-scoped-new-result",
+        "unused-legacy-result",
+        required.expiresAt,
+      ),
+    ).resolves.toBe(true);
 
     const acceptance = {
       resultId: "result-x402",
@@ -198,6 +257,29 @@ describe("Redis x424 state", () => {
         operationId: "operation-2",
       }),
     ).resolves.toBe("replay");
+    const legacyAcceptance = {
+      ...acceptance,
+      resultId: "legacy-acceptance",
+    };
+    await expect(
+      state.resultAcceptances.accept(legacyAcceptance),
+    ).resolves.toBe("new");
+    await expect(
+      state.resultAcceptances.acceptWithLegacy(
+        { ...legacyAcceptance, resultId: "tenant-scoped-acceptance" },
+        "legacy-acceptance",
+      ),
+    ).resolves.toBe("same_operation");
+    await expect(
+      state.resultAcceptances.acceptWithLegacy(
+        {
+          ...legacyAcceptance,
+          resultId: "tenant-scoped-acceptance",
+          operationId: "operation-2",
+        },
+        "legacy-acceptance",
+      ),
+    ).resolves.toBe("replay");
 
     const providerEntry = {
       providerId: "world",
@@ -212,6 +294,32 @@ describe("Redis x424 state", () => {
     await expect(
       state.requirements.get(required.dependencyId),
     ).resolves.toBeUndefined();
+  });
+
+  it("persists requirement ownership for authenticated management", async () => {
+    const state = new RedisX424Store({
+      client: new FakeRedisClient(),
+      topology: "single-endpoint",
+      keyPrefix: "test-x424",
+    });
+    const required = requirement();
+    await state.requirements.putForTenant(required, "tenant-a");
+
+    await expect(
+      state.requirements.get(required.dependencyId),
+    ).resolves.toEqual(required);
+    await expect(
+      state.requirements.getForTenant(required.dependencyId, "tenant-b"),
+    ).resolves.toBeUndefined();
+    await expect(
+      state.requirements.deleteForTenant(required.dependencyId, "tenant-b"),
+    ).resolves.toBe(false);
+    await expect(
+      state.requirements.getForTenant(required.dependencyId, "tenant-a"),
+    ).resolves.toEqual(required);
+    await expect(
+      state.requirements.deleteForTenant(required.dependencyId, "tenant-a"),
+    ).resolves.toBe(true);
   });
 
   it("shares rate limits through Redis", async () => {
@@ -238,6 +346,7 @@ describe("Redis x424 state", () => {
   it("atomically stores and updates one active handoff per dependency", async () => {
     const store = new RedisX424Store({
       client: new FakeRedisClient(),
+      topology: "single-endpoint",
       keyPrefix: "test-x424",
     }).handoffs;
     const first = handoff();

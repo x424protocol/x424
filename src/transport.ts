@@ -52,8 +52,7 @@ export interface PublicOriginConfig {
 }
 
 export function encodedHeaderByteLength(encoded: string): number {
-  // base64url is ASCII; string length equals UTF-8 byte length.
-  return Buffer.byteLength(encoded, "utf8");
+  return new TextEncoder().encode(encoded).byteLength;
 }
 
 export function selectRequirementTransportMode(

@@ -36,8 +36,11 @@ jobs:
       - name: Inspect publishable package
         run: npm pack --dry-run
 
-      - name: Build self-hosted verifier image
-        run: docker build -f deploy/verifier/Dockerfile -t x424-verifier:ci .
+      - name: Validate verifier Helm chart
+        run: bash scripts/verify-helm-chart.sh
+
+      - name: Build and smoke-test self-hosted verifier image
+        run: pnpm image:smoke
 
       - name: Install website dependencies
         working-directory: site

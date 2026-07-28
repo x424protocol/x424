@@ -1,5 +1,6 @@
-apiVersion: v1
-kind: Service
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
 metadata:
   name: {{ .Release.Name }}
   labels:
@@ -9,11 +10,9 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 spec:
-  type: ClusterIP
+  minAvailable: 1
   selector:
-    app.kubernetes.io/name: x424-verifier
-    app.kubernetes.io/instance: {{ .Release.Name }}
-  ports:
-    - name: http
-      port: {{ .Values.service.port }}
-      targetPort: http
+    matchLabels:
+      app.kubernetes.io/name: x424-verifier
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

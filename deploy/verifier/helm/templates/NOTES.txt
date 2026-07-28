@@ -1,0 +1,31 @@
+x424 verifier {{ .Chart.AppVersion }} was rendered for namespace {{ .Release.Namespace }}.
+
+{{ if not .Values.image.digest }}
+WARNING: image.digest is empty, so this release uses the mutable
+{{ printf "%s:%s" .Values.image.repository .Values.image.tag }} tag. Pin the
+published {{ .Chart.AppVersion }} digest before valuable traffic.
+{{ end }}
+
+Upgrades from 0.1.2 or earlier require a maintenance cutover: stop every old
+verifier and protected-resource process, wait at least 15 minutes from the last
+accepted old request, and only then deploy 0.1.3. Do not perform a rolling
+upgrade. See docs/runbooks/state-namespace-0.1.3.md.
+
+The chart deliberately runs one replica. World brokered handoff sessions are
+process-local, so upgrades and restarts can return WORLD_SESSION_LOST for an
+active handoff. Drain handoffs before changing the workload.
+
+The evaluation NetworkPolicy permits DNS, outbound TCP 443, and outbound TCP
+6379. prod-ha-0.2 rendering requires reviewed networkPolicy.dnsCidrs,
+networkPolicy.worldCidrs, and networkPolicy.redisCidrs.
+
+X424_TRUST_PROXY_HOPS is {{ .Values.config.trustProxyHops }}. Set a non-zero
+value only when that exact number of operator-controlled proxies is the sole
+network path to this pod.
+
+Redis topology is {{ .Values.config.redisTopology }}. Redis Cluster is
+unsupported by the 0.1.3 legacy/new-key migration.
+
+The verifier will become Ready only after the existing Secret
+{{ .Values.secretName | quote }} and its Redis/key/provider configuration are
+valid.

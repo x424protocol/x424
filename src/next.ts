@@ -1,6 +1,6 @@
 /** Next.js App Router adapter. NextRequest is structurally a Fetch Request. */
 
-import { protectFetch } from "./fetch.js";
+import { finalizeFetchX424Response, protectFetch } from "./fetch.js";
 import type { ProtectOptions } from "./middleware/resource.js";
 import type { HumanResult } from "./types.js";
 
@@ -21,6 +21,9 @@ export function createNextX424Handler<TContext = unknown>(
     if (!protectedRequest.result) {
       throw new Error("x424 protection completed without a human result");
     }
-    return handler(request, context, protectedRequest.result);
+    return finalizeFetchX424Response(
+      await handler(request, context, protectedRequest.result),
+      protectedRequest.responseHeaders,
+    );
   };
 }
