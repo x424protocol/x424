@@ -526,6 +526,17 @@ describe("reference HTTP API", () => {
         deploymentProfile: "dev-local-0.1",
       }),
     ).toThrow(/LegacyAwareResultAcceptanceStore/);
+    expect(() =>
+      createX424HttpRouter({
+        service,
+        providerRequests: profile.providerRequests,
+        requirementStore: requirements,
+        resultReplayStore,
+        resultAcceptanceStore,
+        issuanceAuthenticator: authenticator,
+        deploymentProfile: "dev-local-0.1",
+      }),
+    ).toThrow(/rateLimiter/);
     const app = express();
     app.use(express.json({ limit: "256kb" }));
     app.use(

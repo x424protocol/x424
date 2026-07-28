@@ -386,6 +386,11 @@ export function createX424HttpRouter(options: X424HttpRouterOptions): Router {
       "Authenticated verifier APIs require a LegacyAwareResultAcceptanceStore",
     );
   }
+  if (options.issuanceAuthenticator && !options.rateLimiter) {
+    throw new Error(
+      "Authenticated verifier APIs require a rateLimiter for every request",
+    );
+  }
   const maximumStateTtlSeconds =
     options.maximumStateTtlSeconds ?? MAXIMUM_STATE_TTL_SECONDS;
   if (

@@ -9,6 +9,7 @@ import {
   createStaticBearerIssuanceAuthenticator,
 } from "x424/express";
 import {
+  MemoryRateLimiter,
   X424Service,
   generatePairwiseSecret,
   generateResultKeyPair,
@@ -54,6 +55,10 @@ app.use(
         subject: "paid-api-example",
         __devWildcardIssuance: true,
       },
+    }),
+    rateLimiter: new MemoryRateLimiter({
+      windowMs: 60_000,
+      maxRequests: 120,
     }),
   }),
 );
