@@ -66,11 +66,53 @@ run_kubeconform() {
 
 package_version="$(node -p "require('./package.json').version")"
 chart_metadata="$(run_helm show chart "$chart_dir")"
+chart_values="$(run_helm show values "$chart_dir")"
 chart_version="$(awk '$1 == "version:" { print $2 }' <<<"$chart_metadata")"
 app_version="$(awk '$1 == "appVersion:" { gsub(/\"/, "", $2); print $2 }' <<<"$chart_metadata")"
+image_repository="$(
+  awk '
+    /^image:/ { in_image = 1; next }
+    in_image && /^[^[:space:]]/ { in_image = 0 }
+    in_image && $1 == "repository:" {
+      gsub(/"/, "", $2)
+      print $2
+      exit
+    }
+  ' <<<"$chart_values"
+)"
+image_tag="$(
+  awk '
+    /^image:/ { in_image = 1; next }
+    in_image && /^[^[:space:]]/ { in_image = 0 }
+    in_image && $1 == "tag:" {
+      gsub(/"/, "", $2)
+      print $2
+      exit
+    }
+  ' <<<"$chart_values"
+)"
+image_digest="$(
+  awk '
+    /^image:/ { in_image = 1; next }
+    in_image && /^[^[:space:]]/ { in_image = 0 }
+    in_image && $1 == "digest:" {
+      gsub(/"/, "", $2)
+      print $2
+      exit
+    }
+  ' <<<"$chart_values"
+)"
 
 if [[ "$chart_version" != "$package_version" || "$app_version" != "$package_version" ]]; then
   echo "Chart version ($chart_version/$app_version) must match package version $package_version." >&2
+  exit 1
+fi
+if [[ "$image_tag" != "$package_version" ]]; then
+  echo "Chart image tag ($image_tag) must match package version $package_version." >&2
+  exit 1
+fi
+if [[ -z "$image_repository" || ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  echo "Chart defaults must contain an image repository and pinned SHA-256 digest." >&2
   exit 1
 fi
 
@@ -114,7 +156,7 @@ if [[ -f "$temp_dir/helm4.yaml" ]]; then
     - <"$temp_dir/helm4.yaml"
 fi
 
-expected_image="ghcr.io/x424protocol/x424-verifier:${package_version}"
+expected_image="${image_repository}@${image_digest}"
 grep -F "image: \"$expected_image\"" "$temp_dir/default.yaml" >/dev/null
 if [[ -f "$temp_dir/helm4.yaml" ]]; then
   grep -F "image: \"$expected_image\"" "$temp_dir/helm4.yaml" >/dev/null
@@ -151,6 +193,7 @@ grep -F "requires non-empty networkPolicy.dnsCidrs, worldCidrs, and redisCidrs" 
 
 if run_helm template x424-ci-unsafe-tag "$chart_dir" \
   --set config.deploymentProfile=prod-ha-0.2 \
+  --set-string image.digest= \
   --set 'networkPolicy.dnsCidrs[0]=10.96.0.10/32' \
   --set 'networkPolicy.worldCidrs[0]=203.0.113.0/24' \
   --set 'networkPolicy.redisCidrs[0]=10.0.0.0/8' \

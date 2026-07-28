@@ -124,8 +124,8 @@ certification or accepted global standard. The repository includes:
 - deterministic x424-before-x402 server and client composition with
   same-operation acceptance;
 - a runnable non-root Redis verifier image and Helm chart;
-- release automation for signed verifier images with provenance and SBOM
-  attestations;
+- a signed public 0.1.3 verifier image with provenance and SBOM attestations,
+  recorded in the [release evidence](docs/program/RELEASE_0.1.3.md);
 - an Express verifier router, OpenAPI 3.1, JSON Schemas, and MCP server; and
 - a no-build dependency console.
 
