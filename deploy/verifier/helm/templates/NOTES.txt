@@ -15,8 +15,9 @@ The chart deliberately runs one replica. World brokered handoff sessions are
 process-local, so upgrades and restarts can return WORLD_SESSION_LOST for an
 active handoff. Drain handoffs before changing the workload.
 
-The evaluation NetworkPolicy permits DNS, outbound TCP 443, and outbound TCP
-6379. prod-ha-0.2 rendering requires reviewed networkPolicy.dnsCidrs,
+The evaluation NetworkPolicy permits any source to the service plus DNS,
+outbound TCP 443, and outbound TCP 6379. prod-ha-0.2 rendering also requires a
+reviewed ingress source and reviewed networkPolicy.dnsCidrs,
 networkPolicy.worldCidrs, and networkPolicy.redisCidrs.
 
 X424_TRUST_PROXY_HOPS is {{ .Values.config.trustProxyHops }}. Set a non-zero

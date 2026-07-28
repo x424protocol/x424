@@ -111,12 +111,8 @@ if [[ "$image_tag" != "$package_version" ]]; then
   echo "Chart image tag ($image_tag) must match package version $package_version." >&2
   exit 1
 fi
-if [[ -z "$image_repository" ]]; then
-  echo "Chart defaults must contain an image repository." >&2
-  exit 1
-fi
-if [[ -n "$image_digest" && ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-  echo "Chart image digest must be empty or a pinned SHA-256 digest." >&2
+if [[ -z "$image_repository" || ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  echo "Chart defaults must contain an image repository and pinned SHA-256 digest." >&2
   exit 1
 fi
 
@@ -167,11 +163,7 @@ if [[ -f "$temp_dir/helm4.yaml" ]]; then
     - <"$temp_dir/helm4.yaml"
 fi
 
-if [[ -n "$image_digest" ]]; then
-  expected_image="${image_repository}@${image_digest}"
-else
-  expected_image="${image_repository}:${image_tag}"
-fi
+expected_image="${image_repository}@${image_digest}"
 grep -F "image: \"$expected_image\"" "$temp_dir/default.yaml" >/dev/null
 if [[ -f "$temp_dir/helm4.yaml" ]]; then
   grep -F "image: \"$expected_image\"" "$temp_dir/helm4.yaml" >/dev/null

@@ -24,9 +24,8 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ### Changed
 
-- The 0.1.4 Helm chart is staged with the `0.1.4` image tag and no digest. Pin
-  the published 0.1.4 digest before valuable traffic; the chart continues to
-  reject mutable images in `prod-ha-0.2`.
+- The 0.1.4 Helm chart pins the published verifier image by its immutable
+  digest and continues to reject mutable images in `prod-ha-0.2`.
 - The chart now requires an operator-supplied ingress allowlist for
   `prod-ha-0.2` and for every nonzero trusted-proxy hop count, making the
   forwarded-address trust boundary explicit and testable.
