@@ -135,7 +135,10 @@ use published vectors and compare byte-for-byte.
 - Issuance authentication, rate limits, CORS, and metadata helpers exist as
   composable interfaces; `dev-local-0.1` may omit them, while `eval-redis-0.2`
   and `prod-ha-0.2` must enable them. The router refuses non-dev profiles
-  without an `issuanceAuthenticator`.
+  without an `issuanceAuthenticator`. The 0.1.4 verifier applies its shared
+  Redis limiter before metadata authentication, and `prod-ha-0.2` rejects
+  static bearer credentials that do not encode at least 32 bytes. Operators
+  must generate those bytes with a cryptographically secure random source.
 - MCP tools intentionally do not accept raw provider proof material.
 - No independent audit, full intermediary matrix, formal verification, or
   production load test has been completed. See

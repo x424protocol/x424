@@ -6,6 +6,34 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+## 0.1.4 - 2026-07-27
+
+### Security
+
+- Added a durable Redis-backed, pre-authentication network limit to the
+  protected verifier-metadata route. Limiter failures now fail closed, and
+  throttled attempts receive `429` with `Retry-After`.
+- Applied `Cache-Control: no-store, private` and `Vary: Authorization` to every
+  verifier-metadata outcome, including authentication, throttling, and
+  dependency-failure responses.
+- Required `prod-ha-0.2` static bearer credentials to be canonical
+  hexadecimal, base64, or base64url encodings of at least 32 bytes; operators
+  must generate those bytes with a cryptographically secure random source.
+  Limiter keys contain only a pseudonymous SHA-256 network identifier, never a
+  raw address or bearer credential.
+
+### Changed
+
+- The 0.1.4 Helm chart is staged with the `0.1.4` image tag and no digest. Pin
+  the published 0.1.4 digest before valuable traffic; the chart continues to
+  reject mutable images in `prod-ha-0.2`.
+- The chart now requires an operator-supplied ingress allowlist for
+  `prod-ha-0.2` and for every nonzero trusted-proxy hop count, making the
+  forwarded-address trust boundary explicit and testable.
+- There is no state-namespace change from 0.1.3 to 0.1.4. Deployments upgrading
+  from 0.1.2 or earlier must still complete the mandatory 0.1.3 maintenance
+  cutover and 15-minute drain.
+
 ## 0.1.3 - 2026-07-27
 
 ### Security

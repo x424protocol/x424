@@ -1,14 +1,15 @@
 # Runbook: 0.1.3 tenant-state namespace cutover
 
 This is a mandatory maintenance-window migration from 0.1.2 or earlier to
-0.1.3. Do not use a rolling deployment. The old release stored requirement and
-result state without the authenticated issuer tenant namespace; 0.1.3 stores
-and reads that state under one-way tenant-scoped identifiers.
+0.1.3 or later. Do not use a rolling deployment. The old release stored
+requirement and result state without the authenticated issuer tenant namespace;
+releases from 0.1.3 onward store and read that state under one-way tenant-scoped
+identifiers.
 
 The two layouts intentionally do not share keys. If old and new traffic
-overlap, or if 0.1.3 starts before an old result has expired, a still-valid
-result that was consumed under the old layout could appear unused in the new
-layout.
+overlap, or if a 0.1.3-or-later release starts before an old result has expired,
+a still-valid result that was consumed under the old layout could appear unused
+in the new layout.
 
 The maintained in-memory, Redis, and PostgreSQL result stores add an atomic
 legacy-key check as defense in depth. Authenticated routers reject custom
@@ -20,8 +21,8 @@ complete drain remains mandatory for every backend.
 
 1. Schedule at least 15 minutes of complete x424 downtime plus deployment and
    validation time.
-2. Pin the intended 0.1.3 container by its published digest. The staged chart
-   tag is mutable and is not a production pin.
+2. Pin the intended 0.1.3-or-later container by its published digest. A staged
+   chart tag is mutable and is not a production pin.
 3. Back up Redis/PostgreSQL according to the normal state-restore procedure.
    Do not export native proofs, bearer tokens, handoff capabilities, or
    provider subjects.
@@ -43,8 +44,9 @@ complete drain remains mandatory for every backend.
    deployment: legacy-aware stores must continue rejecting them until their
    recorded expiry.
 8. Redis deployments must use a single node or primary endpoint. Redis Cluster
-   is unsupported in 0.1.3 because legacy and tenant-scoped keys cannot share a
-   cluster hash slot during the atomic cutover check.
+   is unsupported for the migration introduced in 0.1.3 because legacy and
+   tenant-scoped keys cannot share a cluster hash slot during the atomic
+   cutover check.
 
 ## Cutover
 
@@ -64,8 +66,8 @@ complete drain remains mandatory for every backend.
 5. Do not copy ownerless requirement/result keys into the new namespace. The
    old keys lack trustworthy tenant ownership. Leave them unavailable and let
    their configured retention expire.
-6. Deploy 0.1.3 with `Recreate`, one replica, the stable principal
-   configuration, and the pinned 0.1.3 image digest.
+6. Deploy the intended 0.1.3-or-later release with `Recreate`, one replica, the
+   stable principal configuration, and its pinned image digest.
 7. Keep public ingress closed while completing the validation below. Reopen
    only after every check passes.
 
@@ -90,11 +92,16 @@ complete drain remains mandatory for every backend.
 
 ## Rollback
 
-Prefer a forward fix. Once 0.1.3 traffic has been admitted, an immediate
-rollback can recreate the same replay window in the opposite direction because
-the old release cannot see new tenant-scoped acceptance state.
+Prefer a forward fix. Once 0.1.3-or-later traffic has been admitted, an
+immediate rollback to 0.1.2 or earlier can recreate the same replay window in
+the opposite direction because the old release cannot see new tenant-scoped
+acceptance state.
 
 If rollback is unavoidable, close verifier and protected-resource ingress
-again, stop every 0.1.3 process, and wait at least 900 seconds from the last
-accepted 0.1.3 request before starting an older release. Record the security
-exception and incident timeline.
+again, stop every 0.1.3-or-later process, and wait at least 900 seconds from the
+last accepted request before starting a 0.1.2-or-earlier release. Record the
+security exception and incident timeline.
+
+A rollback from 0.1.4 to 0.1.3 does not cross the state-namespace boundary, so
+this 900-second namespace rollback drain does not apply. The normal World
+handoff drain in [handoff-operations.md](handoff-operations.md) still applies.

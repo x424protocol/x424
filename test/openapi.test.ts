@@ -13,6 +13,12 @@ describe("OpenAPI contract", () => {
       paths: Record<
         string,
         {
+          get?: {
+            responses?: Record<
+              string,
+              { headers?: Record<string, unknown>; content?: unknown }
+            >;
+          };
           post?: { security?: readonly Record<string, readonly string[]>[] };
           delete?: { responses?: Record<string, unknown> };
         }
@@ -20,7 +26,7 @@ describe("OpenAPI contract", () => {
       components: { schemas: Record<string, unknown> };
     };
     expect(spec.openapi).toBe("3.1.0");
-    expect(spec.info.version).toBe("0.1.3");
+    expect(spec.info.version).toBe("0.1.4");
     expect(Object.keys(spec.paths).sort()).toEqual([
       "/.well-known/x424-verifier",
       "/healthz",
@@ -43,6 +49,35 @@ describe("OpenAPI contract", () => {
     expect(
       spec.paths["/v1/requirements/{dependencyId}"]?.delete?.responses?.["404"],
     ).toBeTruthy();
+    const metadataResponses =
+      spec.paths["/.well-known/x424-verifier"]?.get?.responses;
+    expect(Object.keys(metadataResponses ?? {}).sort()).toEqual([
+      "200",
+      "401",
+      "429",
+      "503",
+    ]);
+    for (const status of ["200", "401", "429"] as const) {
+      expect(metadataResponses?.[status]?.headers).toHaveProperty(
+        "Cache-Control",
+      );
+      expect(metadataResponses?.[status]?.headers).toHaveProperty("Vary");
+      expect(metadataResponses?.[status]?.headers).toHaveProperty(
+        "X-RateLimit-Remaining",
+      );
+    }
+    expect(metadataResponses?.["401"]?.headers).toHaveProperty(
+      "WWW-Authenticate",
+    );
+    expect(metadataResponses?.["429"]?.headers).toHaveProperty("Retry-After");
+    expect(metadataResponses?.["503"]?.headers).toHaveProperty("Cache-Control");
+    expect(metadataResponses?.["503"]?.headers).toHaveProperty("Vary");
+    expect(metadataResponses?.["503"]?.headers).not.toHaveProperty(
+      "X-RateLimit-Remaining",
+    );
+    for (const status of ["401", "429", "503"] as const) {
+      expect(metadataResponses?.[status]?.content).toBeTruthy();
+    }
     expect(raw).toContain('"x424Transport"');
     expect(raw).toContain('"providerRequests"');
     expect(raw).not.toContain("providerSubject");
