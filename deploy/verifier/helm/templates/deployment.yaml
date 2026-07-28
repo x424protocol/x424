@@ -1,6 +1,7 @@
 {{- if ne (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must remain 1 while World brokered handoff sessions are process-local" }}
 {{- end }}
+{{- $hasRestrictedIngress := or (gt (len .Values.networkPolicy.ingressCidrs) 0) (gt (len .Values.networkPolicy.ingressNamespaceLabels) 0) (gt (len .Values.networkPolicy.ingressPodLabels) 0) }}
 {{- if eq .Values.config.deploymentProfile "prod-ha-0.2" }}
 {{- if not .Values.image.digest }}
 {{- fail "prod-ha-0.2 requires image.digest; mutable image tags are forbidden" }}
@@ -11,6 +12,12 @@
 {{- if or (eq (len .Values.networkPolicy.dnsCidrs) 0) (eq (len .Values.networkPolicy.worldCidrs) 0) (eq (len .Values.networkPolicy.redisCidrs) 0) }}
 {{- fail "prod-ha-0.2 requires non-empty networkPolicy.dnsCidrs, worldCidrs, and redisCidrs" }}
 {{- end }}
+{{- if not $hasRestrictedIngress }}
+{{- fail "prod-ha-0.2 requires a restricted ingress source via networkPolicy.ingressCidrs, ingressNamespaceLabels, or ingressPodLabels" }}
+{{- end }}
+{{- end }}
+{{- if and (gt (int .Values.config.trustProxyHops) 0) (or (not .Values.networkPolicy.enabled) (not $hasRestrictedIngress)) }}
+{{- fail "nonzero config.trustProxyHops requires an enabled NetworkPolicy and an explicit ingress source" }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

@@ -38,7 +38,7 @@ Gates reference a named profile. “Works locally” is not a profile.
 | RTO                                                | ≤ 30 minutes                                               |
 | RPO                                                | ≤ 5 minutes                                                |
 | Backup                                             | Redis AOF or snapshot every ≤ 5 minutes                    |
-| Rate limits                                        | Required on issuance and verify                            |
+| Rate limits                                        | Required on metadata, auth, issuance, verify, and state    |
 | Provider egress                                    | Explicit allowlist                                         |
 | Allowed to protect production value                | Only after independent assessment against this profile     |
 
@@ -58,7 +58,7 @@ Gates reference a named profile. “Works locally” is not a profile.
 | RTO                                                | ≤ 15 minutes                                             |
 | RPO                                                | ≤ 60 seconds                                             |
 | Backup                                             | Continuous WAL/AOF; tested restore ≤ RTO                 |
-| Rate limits + circuit breakers                     | Required                                                 |
+| Rate limits + circuit breakers                     | Required on every auth/state/provider boundary           |
 | Key custody                                        | KMS/HSM-compatible; no exported production private keys  |
 | Metadata                                           | Authenticated; cache, rollover, revocation tested        |
 | Allowed to protect production value                | Only after signed gate record for this profile           |

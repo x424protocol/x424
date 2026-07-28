@@ -111,8 +111,12 @@ if [[ "$image_tag" != "$package_version" ]]; then
   echo "Chart image tag ($image_tag) must match package version $package_version." >&2
   exit 1
 fi
-if [[ -z "$image_repository" || ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-  echo "Chart defaults must contain an image repository and pinned SHA-256 digest." >&2
+if [[ -z "$image_repository" ]]; then
+  echo "Chart defaults must contain an image repository." >&2
+  exit 1
+fi
+if [[ -n "$image_digest" && ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  echo "Chart image digest must be empty or a pinned SHA-256 digest." >&2
   exit 1
 fi
 
@@ -123,10 +127,17 @@ run_helm template x424-ci-restricted "$chart_dir" \
   --namespace x424-ci \
   --set config.deploymentProfile=prod-ha-0.2 \
   --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set 'networkPolicy.ingressCidrs[0]=10.1.0.0/16' \
   --set 'networkPolicy.dnsCidrs[0]=10.96.0.10/32' \
   --set 'networkPolicy.worldCidrs[0]=203.0.113.0/24' \
   --set 'networkPolicy.redisCidrs[0]=10.0.0.0/8' \
   >"$temp_dir/restricted-egress.yaml"
+run_helm template x424-ci-trusted-proxy "$chart_dir" \
+  --namespace x424-ci \
+  --set config.trustProxyHops=1 \
+  --set-string 'networkPolicy.ingressNamespaceLabels.kubernetes\.io/metadata\.name=ingress-nginx' \
+  --set-string 'networkPolicy.ingressPodLabels.app\.kubernetes\.io/name=ingress-nginx' \
+  >"$temp_dir/trusted-proxy.yaml"
 run_helm template x424-ci-minimal "$chart_dir" \
   --namespace x424-ci \
   --set networkPolicy.enabled=false \
@@ -140,7 +151,7 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 for kubernetes_version in 1.25.0 1.31.0; do
-  for manifest in default restricted-egress minimal; do
+  for manifest in default restricted-egress trusted-proxy minimal; do
     run_kubeconform \
       -strict \
       -summary \
@@ -156,15 +167,24 @@ if [[ -f "$temp_dir/helm4.yaml" ]]; then
     - <"$temp_dir/helm4.yaml"
 fi
 
-expected_image="${image_repository}@${image_digest}"
+if [[ -n "$image_digest" ]]; then
+  expected_image="${image_repository}@${image_digest}"
+else
+  expected_image="${image_repository}:${image_tag}"
+fi
 grep -F "image: \"$expected_image\"" "$temp_dir/default.yaml" >/dev/null
 if [[ -f "$temp_dir/helm4.yaml" ]]; then
   grep -F "image: \"$expected_image\"" "$temp_dir/helm4.yaml" >/dev/null
 fi
 grep -F "port: 53" "$temp_dir/default.yaml" >/dev/null
+grep -F "cidr: \"10.1.0.0/16\"" "$temp_dir/restricted-egress.yaml" >/dev/null
 grep -F "cidr: \"10.96.0.10/32\"" "$temp_dir/restricted-egress.yaml" >/dev/null
 grep -F "cidr: \"203.0.113.0/24\"" "$temp_dir/restricted-egress.yaml" >/dev/null
 grep -F "cidr: \"10.0.0.0/8\"" "$temp_dir/restricted-egress.yaml" >/dev/null
+grep -F "kubernetes.io/metadata.name: ingress-nginx" \
+  "$temp_dir/trusted-proxy.yaml" >/dev/null
+grep -F "app.kubernetes.io/name: ingress-nginx" \
+  "$temp_dir/trusted-proxy.yaml" >/dev/null
 grep -A1 -F "name: X424_TRUST_PROXY_HOPS" "$temp_dir/default.yaml" |
   grep -F 'value: "0"' >/dev/null
 if grep -Eq '^kind: (NetworkPolicy|PodDisruptionBudget)$' "$temp_dir/minimal.yaml"; then
@@ -191,9 +211,24 @@ fi
 grep -F "requires non-empty networkPolicy.dnsCidrs, worldCidrs, and redisCidrs" \
   "$temp_dir/unsafe-prod.log" >/dev/null
 
+if run_helm template x424-ci-unsafe-prod-ingress "$chart_dir" \
+  --set config.deploymentProfile=prod-ha-0.2 \
+  --set-string image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set 'networkPolicy.dnsCidrs[0]=10.96.0.10/32' \
+  --set 'networkPolicy.worldCidrs[0]=203.0.113.0/24' \
+  --set 'networkPolicy.redisCidrs[0]=10.0.0.0/8' \
+  >"$temp_dir/unsafe-prod-ingress.yaml" 2>"$temp_dir/unsafe-prod-ingress.log"; then
+  echo "The chart accepted production without an explicit ingress source." >&2
+  exit 1
+fi
+
+grep -F "prod-ha-0.2 requires a restricted ingress source" \
+  "$temp_dir/unsafe-prod-ingress.log" >/dev/null
+
 if run_helm template x424-ci-unsafe-tag "$chart_dir" \
   --set config.deploymentProfile=prod-ha-0.2 \
   --set-string image.digest= \
+  --set 'networkPolicy.ingressCidrs[0]=10.1.0.0/16' \
   --set 'networkPolicy.dnsCidrs[0]=10.96.0.10/32' \
   --set 'networkPolicy.worldCidrs[0]=203.0.113.0/24' \
   --set 'networkPolicy.redisCidrs[0]=10.0.0.0/8' \
@@ -204,4 +239,15 @@ fi
 
 grep -F "requires image.digest; mutable image tags are forbidden" \
   "$temp_dir/unsafe-tag.log" >/dev/null
-echo "helm verification ok: Helm 3/4 lint, values schema, render variants, restricted production egress, proxy boundary, HA guard, Kubernetes schemas"
+
+if run_helm template x424-ci-unsafe-proxy "$chart_dir" \
+  --set config.trustProxyHops=1 \
+  >"$temp_dir/unsafe-proxy.yaml" 2>"$temp_dir/unsafe-proxy.log"; then
+  echo "The chart accepted trusted proxy headers without restricted ingress." >&2
+  exit 1
+fi
+
+grep -F "nonzero config.trustProxyHops requires an enabled NetworkPolicy and an explicit ingress source" \
+  "$temp_dir/unsafe-proxy.log" >/dev/null
+
+echo "helm verification ok: Helm 3/4 lint, values schema, render variants, restricted production ingress/egress, proxy boundary, HA guard, Kubernetes schemas"

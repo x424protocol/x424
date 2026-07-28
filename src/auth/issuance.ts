@@ -84,9 +84,30 @@ const MAXIMUM_BEARER_TOKEN_LENGTH = 4_096;
 const MAXIMUM_PRINCIPAL_STRING_LENGTH = 2_048;
 const BEARER_TOKEN_PATTERN = /^[A-Za-z0-9\-._~+/]{1,4096}={0,2}$/u;
 const PRINCIPAL_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
+const PRODUCTION_BEARER_CREDENTIAL_BYTES = 32;
 
 function bearerCredentialDigest(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("base64url");
+}
+
+function decodedCredentialBytes(token: string): number | undefined {
+  const decodedLengths: number[] = [];
+  if (/^[A-Fa-f0-9]+$/u.test(token) && token.length % 2 === 0) {
+    decodedLengths.push(token.length / 2);
+  }
+  if (/^[A-Za-z0-9_-]+$/u.test(token)) {
+    const decoded = Buffer.from(token, "base64url");
+    if (decoded.toString("base64url") === token) {
+      decodedLengths.push(decoded.byteLength);
+    }
+  }
+  if (/^[A-Za-z0-9+/]+={0,2}$/u.test(token)) {
+    const decoded = Buffer.from(token, "base64");
+    if (decoded.toString("base64") === token) {
+      decodedLengths.push(decoded.byteLength);
+    }
+  }
+  return decodedLengths.length > 0 ? Math.max(...decodedLengths) : undefined;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -501,4 +522,27 @@ export function createStaticBearerIssuanceAuthenticator(
       return principal;
     },
   };
+}
+
+/**
+ * Reject production static bearer credentials that are not canonical
+ * hexadecimal, base64, or base64url encodings of at least 32 bytes. Operators
+ * must generate those bytes with a cryptographically secure random source.
+ */
+export function assertProductionBearerCredentials(
+  tokens: Readonly<Record<string, unknown>>,
+): void {
+  if (!isPlainRecord(tokens) || Object.keys(tokens).length === 0) {
+    throw new Error("Production bearer credentials must be a non-empty record");
+  }
+  for (const token of Object.keys(tokens)) {
+    if (
+      !BEARER_TOKEN_PATTERN.test(token) ||
+      (decodedCredentialBytes(token) ?? 0) < PRODUCTION_BEARER_CREDENTIAL_BYTES
+    ) {
+      throw new Error(
+        "Production bearer credentials must encode at least 32 bytes as canonical hexadecimal, base64, or base64url; generate credentials with a cryptographically secure random source",
+      );
+    }
+  }
 }

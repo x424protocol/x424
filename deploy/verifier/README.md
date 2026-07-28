@@ -7,7 +7,7 @@ provider-subject digests, result replay markers, and rate limits in Redis; and
 same-operation result acceptances and encrypted brokered handoffs in Redis; and
 shuts down gracefully.
 
-The signed 0.1.3 developer-preview image is public:
+The signed 0.1.3 developer-preview image remains public:
 
 ```bash
 docker pull ghcr.io/x424protocol/x424-verifier@sha256:d97587f1d7c5b8cffda7753a9da24da9b4a2da1880b339133fc4bac3ff6bfbcd
@@ -17,7 +17,10 @@ See the [0.1.3 release evidence](../../docs/program/RELEASE_0.1.3.md) for the
 source tag, workflow, npm artifact, provenance, SBOM, signature, and maturity
 boundary. The previous 0.1.2 image is historical evidence only and must not be
 deployed; 0.1.3 fixes verifier isolation and protected-response cache
-boundaries.
+boundaries. Version 0.1.4 additionally places the protected metadata route
+behind the shared Redis limiter and is staged for publication. Until 0.1.4 is
+published, place 0.1.3 behind an external ingress rate limit and use bearer
+credentials generated from at least 32 random bytes.
 
 ## Local evaluation
 
@@ -67,25 +70,32 @@ deployment safe.
 
 ## Helm evaluation
 
-The chart defaults to the immutable published 0.1.3 image digest, the
-`eval-redis-0.2` runtime controls, World staging, issuer-supplied provider
-requests, and one replica. Selecting `prod-ha-0.2` also makes a non-empty
-immutable `image.digest` mandatory; the chart refuses a mutable production
-tag. Put the required environment variables in an existing Secret; the chart
-deliberately does not render key material:
+The chart is staged for 0.1.4 with the `0.1.4` tag and an empty digest; it does
+not retain the previous 0.1.3 image digest. After release automation publishes
+the image, set `image.digest` to the published 0.1.4 digest before deploying
+valuable traffic. The other defaults select the `eval-redis-0.2` runtime
+controls, World staging, issuer-supplied provider requests, and one replica.
+Selecting `prod-ha-0.2` also makes a non-empty immutable `image.digest`
+mandatory; the chart refuses a mutable production tag. Put the required
+environment variables in an existing Secret; the chart deliberately does not
+render key material:
 
 ```bash
 kubectl create namespace x424
 kubectl --namespace x424 create secret generic x424-verifier \
   --from-env-file=/secure/path/x424-verifier.env
 helm upgrade --install x424-verifier deploy/verifier/helm \
-  --namespace x424
+  --namespace x424 \
+  --set-string image.digest=sha256:REPLACE_WITH_PUBLISHED_0_1_4_DIGEST
 ```
 
 For the default mode, the Secret must supply `REDIS_URL`,
 `X424_ISSUANCE_PRINCIPALS_JSON`, result-signing and pairwise key configuration,
 `X424_HANDOFF_STATE_KEY`, `WORLD_APP_ID`, `WORLD_RP_ID`, and `WORLD_ACTION`.
 Keep the environment file outside the repository and shell history.
+For every `prod-ha-0.2` principal, generate the JSON object key from at least
+32 random bytes (for example, `openssl rand -base64 32`); literal example
+tokens are rejected in production.
 
 The image also requires `X424_REDIS_TOPOLOGY=single-endpoint`; the chart sets
 it. Redis Cluster is rejected in 0.1.3 because the safe legacy/new-key cutover
@@ -94,7 +104,8 @@ Redis primary or one primary endpoint managed through failover is supported.
 
 Upgrading from 0.1.2 or earlier requires a full maintenance window: stop old
 verifier and protected-resource traffic, wait at least 15 minutes, and then
-deploy 0.1.3. Do not use a rolling update or immediate rollback. Follow the
+deploy 0.1.3 or later. Do not use a rolling update or immediate rollback.
+Follow the
 [0.1.3 tenant-state namespace cutover runbook](../../docs/runbooks/state-namespace-0.1.3.md).
 
 The chart intentionally enforces one replica and uses a `Recreate` deployment
@@ -105,19 +116,24 @@ single-replica chart does not satisfy the availability targets of
 `eval-redis-0.2` or `prod-ha-0.2`; multi-replica deployment stays blocked until
 World sessions are resumable or owner-routed.
 
-With the NetworkPolicy enabled, the functional evaluation default permits DNS,
-outbound TCP 443, and outbound TCP 6379. Empty CIDR lists mean any destination
-on that port. Selecting `prod-ha-0.2` fails chart rendering unless the policy
-is enabled and `dnsCidrs`, `worldCidrs`, and `redisCidrs` are all non-empty.
-Use reviewed ranges and set `redisPort` when Redis uses a non-default or TLS
-port. Validate them against the cluster CNI because NetworkPolicy treatment of
-service and post-NAT addresses varies.
+With the NetworkPolicy enabled, the functional evaluation default permits any
+source to the service port plus DNS, outbound TCP 443, and outbound TCP 6379.
+Empty egress CIDR lists mean any destination on that port. Selecting
+`prod-ha-0.2` fails chart rendering unless the policy is enabled; at least one
+reviewed ingress source is configured through `ingressCidrs`,
+`ingressNamespaceLabels`, or `ingressPodLabels`; and `dnsCidrs`, `worldCidrs`,
+and `redisCidrs` are all non-empty. Namespace and pod labels form one combined
+NetworkPolicy peer. Use reviewed ranges and set `redisPort` when Redis uses a
+non-default or TLS port. Validate all selectors against the cluster CNI because
+NetworkPolicy treatment of service and post-NAT addresses varies.
 
 `config.trustProxyHops` defaults to zero, so untrusted forwarded IP headers
 cannot influence authentication-attempt rate limits. When an ingress is the
 only network path to the verifier, set it to the exact count of
-operator-controlled reverse proxies between the client and Express. Never set
-it while pods remain directly reachable from an untrusted network.
+operator-controlled reverse proxies between the client and Express. The chart
+refuses a nonzero value unless its NetworkPolicy is enabled with an explicit
+ingress source. Never trust forwarded headers while pods remain directly
+reachable from an untrusted network.
 
 Run the same pinned Helm and Kubernetes-schema checks used by CI:
 
@@ -139,14 +155,19 @@ key bytes enter x424. Development/evaluation profiles instead require an exact
 
 - Redis with authentication, TLS, persistence, tested backups, and restricted
   network access
-- least-privilege token principals in `X424_ISSUANCE_PRINCIPALS_JSON`
+- least-privilege token principals in `X424_ISSUANCE_PRINCIPALS_JSON`, with
+  each production bearer generated from at least 32 random bytes and encoded
+  as canonical hexadecimal, base64, or base64url
 - a mounted KMS/HSM module and published signed verifier metadata
 - encrypted handoff state, capability-digest storage, and the brokered-handoff
   operational runbook
-- ingress TLS, request-size enforcement, exact trusted-proxy hops, and reviewed
-  DNS/provider/Redis/KMS egress allowlists
+- ingress TLS, request-size enforcement, exact trusted-proxy hops, the durable
+  Redis metadata/authentication limiter, and reviewed DNS/provider/Redis/KMS
+  egress allowlists
 - signed image verification, SBOM retention, and the runbooks in `docs/runbooks/`
 
 The Helm chart supplies workload-level probes, non-root restrictions, resource
-limits, an immutable default image reference, a disruption budget, and
-network-policy defaults. Secrets are deliberately not rendered by the chart.
+limits, support for immutable `image.digest` references, a disruption budget,
+and network-policy defaults. The staged release tag is not an immutable
+reference; set `image.digest` before valuable traffic. Secrets are deliberately
+not rendered by the chart.

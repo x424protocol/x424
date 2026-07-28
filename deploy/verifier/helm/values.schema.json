@@ -121,6 +121,9 @@
       "additionalProperties": false,
       "required": [
         "enabled",
+        "ingressCidrs",
+        "ingressNamespaceLabels",
+        "ingressPodLabels",
         "dnsCidrs",
         "worldPort",
         "worldCidrs",
@@ -130,6 +133,28 @@
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "ingressCidrs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "ingressNamespaceLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "ingressPodLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "dnsCidrs": {
           "type": "array",

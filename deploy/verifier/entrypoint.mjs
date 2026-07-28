@@ -5,9 +5,11 @@ import { pathToFileURL } from "node:url";
 import express from "express";
 import { createClient } from "redis";
 import {
+  assertProductionBearerCredentials,
   CircuitBreaker,
   X424Service,
   createStaticBearerIssuanceAuthenticator,
+  createVerifierMetadataHandler,
   createX424HttpRouter,
   generateResultKeyPair,
 } from "./dist/index.js";
@@ -139,6 +141,17 @@ const providerRequestMode =
 if (providerRequestMode !== "verifier" && providerRequestMode !== "issuer") {
   throw new Error("X424_PROVIDER_REQUEST_MODE must be verifier or issuer");
 }
+const issuanceAuthenticator = (() => {
+  const principals = parsePrincipals();
+  if (profile === "prod-ha-0.2") {
+    assertProductionBearerCredentials(principals);
+  }
+  return createStaticBearerIssuanceAuthenticator(principals);
+})();
+const metadataToken = process.env.X424_METADATA_TOKEN;
+if (profile === "prod-ha-0.2" && !metadataToken) {
+  throw new Error("prod-ha-0.2 requires X424_METADATA_TOKEN");
+}
 
 const redisTopology = required("X424_REDIS_TOPOLOGY");
 if (redisTopology !== "single-endpoint") {
@@ -219,12 +232,6 @@ const handoffService = new HumanHandoffService({
   protector: keys.handoffStateProtector,
   adapters: [createWorldIdHandoffAdapter()],
 });
-const issuanceAuthenticator =
-  createStaticBearerIssuanceAuthenticator(parsePrincipals());
-const metadataToken = process.env.X424_METADATA_TOKEN;
-if (profile === "prod-ha-0.2" && !metadataToken) {
-  throw new Error("prod-ha-0.2 requires X424_METADATA_TOKEN");
-}
 
 const app = express();
 app.disable("x-powered-by");
@@ -234,26 +241,17 @@ if (trustProxyHops > 0) {
   // through exactly this many operator-controlled reverse proxies.
   app.set("trust proxy", trustProxyHops);
 }
-app.use(express.json({ limit: "256kb", strict: true }));
 if (metadataToken) {
-  app.get("/.well-known/x424-verifier", async (request, response) => {
-    try {
-      await issuanceAuthenticator.authenticate({
-        authorizationHeader: request.get("authorization"),
-      });
-      response
-        .set("cache-control", "no-store, private")
-        .json({ token: metadataToken });
-    } catch {
-      response.status(401).type("application/problem+json").json({
-        type: "https://x424.org/problems/unauthenticated",
-        title: "UNAUTHENTICATED",
-        status: 401,
-        detail: "Authentication is required.",
-      });
-    }
-  });
+  app.get(
+    "/.well-known/x424-verifier",
+    createVerifierMetadataHandler({
+      token: metadataToken,
+      issuanceAuthenticator,
+      rateLimiter,
+    }),
+  );
 }
+app.use(express.json({ limit: "256kb", strict: true }));
 app.use(
   createX424HttpRouter({
     service,

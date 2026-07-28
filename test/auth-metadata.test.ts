@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  assertProductionBearerCredentials,
   authorizeIssuance,
   createStaticBearerIssuanceAuthenticator,
   IssuanceAuthorizationError,
@@ -154,6 +155,62 @@ describe("issuance authorization", () => {
         } as IssuancePrincipal,
       }),
     ).toThrow(IssuanceAuthorizationError);
+  });
+
+  it("requires production bearer credentials to encode at least 32 bytes", () => {
+    expect(() => assertProductionBearerCredentials({})).toThrow(
+      /non-empty record/,
+    );
+    expect(() =>
+      assertProductionBearerCredentials({
+        short: principal(),
+      }),
+    ).toThrow(/at least 32 bytes/);
+    expect(() =>
+      assertProductionBearerCredentials({
+        ["ab".repeat(31)]: principal(),
+      }),
+    ).toThrow(/at least 32 bytes/);
+    expect(() =>
+      assertProductionBearerCredentials({
+        ["a".repeat(43)]: principal(),
+      }),
+    ).toThrow(/canonical/);
+    expect(() =>
+      assertProductionBearerCredentials({
+        [`${"a".repeat(42)}A`]: principal(),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProductionBearerCredentials({
+        ["A".repeat(44)]: principal(),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProductionBearerCredentials({
+        ["ab".repeat(32)]: principal(),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProductionBearerCredentials({
+        [Buffer.alloc(32, 251).toString("base64")]: principal(),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProductionBearerCredentials({
+        [Buffer.alloc(32, 7).toString("base64url")]: principal(),
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertProductionBearerCredentials({
+        [`${Buffer.alloc(32, 255).toString("base64url")}=`]: principal(),
+      }),
+    ).toThrow(/canonical/);
+    expect(() =>
+      assertProductionBearerCredentials({
+        ["!".repeat(64)]: principal(),
+      }),
+    ).toThrow(/canonical/);
   });
 
   it("rejects URI prefix confusion against sibling hosts and paths", () => {

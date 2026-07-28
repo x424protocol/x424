@@ -19,6 +19,26 @@ spec:
     - ports:
         - protocol: TCP
           port: 8080
+{{- if or .Values.networkPolicy.ingressCidrs .Values.networkPolicy.ingressNamespaceLabels .Values.networkPolicy.ingressPodLabels }}
+      from:
+{{- if or .Values.networkPolicy.ingressNamespaceLabels .Values.networkPolicy.ingressPodLabels }}
+        -
+{{- if .Values.networkPolicy.ingressNamespaceLabels }}
+          namespaceSelector:
+            matchLabels:
+{{ toYaml .Values.networkPolicy.ingressNamespaceLabels | indent 14 }}
+{{- end }}
+{{- if .Values.networkPolicy.ingressPodLabels }}
+          podSelector:
+            matchLabels:
+{{ toYaml .Values.networkPolicy.ingressPodLabels | indent 14 }}
+{{- end }}
+{{- end }}
+{{- range .Values.networkPolicy.ingressCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+{{- end }}
+{{- end }}
   egress:
     # Kubernetes NetworkPolicy has no portable FQDN selector. DNS is required
     # for the World and Redis hostnames configured through the Secret.

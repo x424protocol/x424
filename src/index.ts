@@ -1,6 +1,7 @@
 export * from "./adapters.js";
 export * from "./agent.js";
 export * from "./api/router.js";
+export * from "./api/verifier-metadata-route.js";
 export * from "./facade.js";
 export * from "./fetch.js";
 export * from "./managed.js";
