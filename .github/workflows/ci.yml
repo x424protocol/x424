@@ -52,6 +52,4 @@ jobs:
 
       - name: Audit website dependencies
         working-directory: site
-        # Legacy lint-only minimatch consumers have no API-compatible patched line.
-        # The deployed site excludes devDependencies; audit the graph that ships.
-        run: npm audit --omit=dev --audit-level=moderate
+        run: npm audit --audit-level=moderate
