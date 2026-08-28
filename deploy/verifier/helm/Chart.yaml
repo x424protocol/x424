@@ -2,8 +2,8 @@ apiVersion: v2
 name: x424-verifier
 description: Self-hosted x424 unique-human dependency verifier
 type: application
-version: 0.1.4
-appVersion: "0.1.4"
+version: 0.1.5
+appVersion: "0.1.5"
 kubeVersion: ">=1.25.0-0"
 home: https://x424.org
 sources:
