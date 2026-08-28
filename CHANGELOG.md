@@ -6,6 +6,26 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+## 0.1.5 - 2026-08-28
+
+### Security
+
+- Refreshed the root and website dependency graphs to eliminate all current
+  npm audit findings, including the `fast-uri`, `nanoid`, `postcss`, and
+  website build-tool advisories.
+- Added full root and website dependency audits to the required CI gate.
+- Moved checkout, Node/pnpm setup, and Docker release actions to immutable
+  Node.js 24 release pins.
+
+### Changed
+
+- Updated the maintained World ID, x402, MCP, Redis, viem, and build-tool
+  integrations to their current compatible releases.
+- Upgraded the website to the current compatible Sites/vinext build stack and
+  restored full production-plus-development dependency auditing.
+- Added browser bundle-size budgets. Zod remains pinned to 4.4.3 because its
+  4.5.1 root export increased the generic browser bundle by 31 percent.
+
 ## 0.1.4 - 2026-07-27
 
 ### Security

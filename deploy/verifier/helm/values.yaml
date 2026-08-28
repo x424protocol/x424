@@ -4,8 +4,9 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/x424protocol/x424-verifier
-  # Published 0.1.4 image, pinned immutably.
-  tag: "0.1.4"
+  # The digest remains the last published image until the 0.1.5 release job
+  # supplies its immutable replacement; digest takes precedence over tag.
+  tag: "0.1.5"
   digest: "sha256:471dd506115fb740e61e0f1263161ba91f171c706e7b4071c9e606feb1cb8061"
   pullPolicy: IfNotPresent
 
