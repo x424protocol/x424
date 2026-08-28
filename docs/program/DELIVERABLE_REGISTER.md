@@ -1,6 +1,6 @@
 # Public release-gate evidence
 
-Updated: 2026-07-28
+Updated: 2026-08-28
 
 Status values: `complete` | `partial` | `externally_blocked` | `not_started`.
 A document or local test is not independent evidence. Never invent reviewers,
@@ -9,9 +9,9 @@ approvals, deployments, adopters, or artifact URLs.
 | Gate                     | Status             | Repository evidence                                                           | Missing external evidence                                         |
 | ------------------------ | ------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | 0.1 wire and schemas     | partial            | protocol, schemas, OpenAPI, vectors, security regressions                     | independent design/threat review                                  |
-| 0.1 package              | complete           | [signed `v0.1.4`, npm provenance, tarball/checksum, image](RELEASE_0.1.4.md)  | —                                                                 |
+| 0.1 package              | complete           | [signed `v0.1.5`, npm provenance, tarball/checksum, image](RELEASE_0.1.5.md)  | —                                                                 |
 | 0.1 developer experience | partial            | automated one-command flow, World and HTTP examples                           | managed sandbox and timed unfamiliar-developer run                |
-| 0.2 self-hosted verifier | partial            | [0.1.4 signed image, SBOM/provenance](RELEASE_0.1.4.md), Helm, key interfaces | independent assessment and production load/failover exercises     |
+| 0.2 self-hosted verifier | partial            | [0.1.5 signed image, SBOM/provenance](RELEASE_0.1.5.md), Helm, key interfaces | independent assessment and production load/failover exercises     |
 | 0.2 managed verifier     | partial            | public issuance/state/replay client and OpenAPI                               | separate conforming service, console, tenant/security review      |
 | 0.2 frameworks           | partial            | Express, Fetch, and Next.js parity tests                                      | real World browser/mobile matrix                                  |
 | 0.2 x402 composition     | partial            | helpers, official-client adapter, examples, ordering tests                    | live self-hosted/managed payment evidence                         |

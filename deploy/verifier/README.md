@@ -7,13 +7,13 @@ provider-subject digests, result replay markers, and rate limits in Redis; and
 same-operation result acceptances and encrypted brokered handoffs in Redis; and
 shuts down gracefully.
 
-The signed 0.1.4 developer-preview image is public:
+The signed 0.1.5 developer-preview image is public:
 
 ```bash
-docker pull ghcr.io/x424protocol/x424-verifier@sha256:471dd506115fb740e61e0f1263161ba91f171c706e7b4071c9e606feb1cb8061
+docker pull ghcr.io/x424protocol/x424-verifier@sha256:7972f248786346fb83d3567fe58ec3d420c728c7a4109010bcbab5d4a81eeec6
 ```
 
-See the [0.1.4 release evidence](../../docs/program/RELEASE_0.1.4.md) for the
+See the [0.1.5 release evidence](../../docs/program/RELEASE_0.1.5.md) for the
 source tag, workflow, npm artifact, provenance, SBOM, signature, and maturity
 boundary. The previous 0.1.2 image is historical evidence only and must not be
 deployed; 0.1.3 fixes verifier isolation and protected-response cache
@@ -69,7 +69,7 @@ deployment safe.
 
 ## Helm evaluation
 
-The chart defaults to the immutable published 0.1.4 image digest, the
+The chart defaults to the immutable published 0.1.5 image digest, the
 `eval-redis-0.2` runtime controls, World staging, issuer-supplied provider
 requests, and one replica. Selecting `prod-ha-0.2` also keeps a non-empty
 immutable `image.digest` mandatory; the chart refuses a mutable production
