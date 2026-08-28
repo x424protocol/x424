@@ -175,11 +175,21 @@ function smokeWorldClient(source) {
   }
 }
 
+function assertBundleBudget(label, source, maximumBytes) {
+  if (source.length > maximumBytes) {
+    throw new Error(
+      `${label} browser bundle is ${source.length} B; budget is ${maximumBytes} B`,
+    );
+  }
+}
+
 const clientBundle = await bundle("x424/client", "X424Client");
 const worldBundle = await bundle(
   "x424/providers/world-id/client",
   "X424WorldClient",
 );
+assertBundleBudget("x424/client", clientBundle, 700_000);
+assertBundleBudget("x424/providers/world-id/client", worldBundle, 200_000);
 await smokeClient(clientBundle);
 smokeWorldClient(worldBundle);
 console.log(

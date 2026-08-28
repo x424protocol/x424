@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit package dependencies
+        run: pnpm audit --audit-level=moderate
+
       - name: Check
         run: pnpm check
 
