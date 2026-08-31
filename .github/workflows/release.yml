@@ -94,7 +94,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
           artifact-name: x424-verifier-${{ github.ref_name }}.spdx.json
