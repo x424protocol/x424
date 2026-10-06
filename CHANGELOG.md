@@ -6,6 +6,15 @@ Wire compatibility remains governed by `docs/PROTOCOL.md` and
 
 ## Unreleased
 
+### Security
+
+- Updated the root lockfile to patched `fast-uri` and `qs` releases.
+- Updated the website's Next.js, Sharp, and URI-parser pins and refreshed
+  compatible transitive dependencies for published security fixes.
+- The website audit still reports the unpatched build/lint dependency
+  `braces` ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)).
+  The required dependency-audit gate remains in place.
+
 ## 0.1.5 - 2026-08-28
 
 ### Security
